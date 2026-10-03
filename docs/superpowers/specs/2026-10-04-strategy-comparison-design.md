@@ -116,7 +116,7 @@ class Answer:
    boundaries with a small overlap. Each chunk keeps its `section_id`.
 4. Embeddings are computed locally ([ADR 0008](../../adr/0008-local-embeddings-and-fts5-for-rag.md))
    and stored as blobs; chunks are also inserted into an FTS5 table.
-5. The whole-context token count is measured once with the token-counting endpoint and stored.
+5. The whole-context token count is measured with the token-counting endpoint on the first whole-context question and stored, so `ingest` needs no API credentials.
 
 Command: `python -m uma ingest [--manuals-dir manuals]`. Re-running replaces the corpus.
 
@@ -152,7 +152,7 @@ displayed text. A missing or malformed tag yields `answered` and a logged warnin
 ### 6.1 Ask page (`/`)
 
 - Question box; three columns, one per strategy, filling in parallel.
-- Each column: answer text (Markdown rendered with marked, sanitised with DOMPurify) with inline citation markers → links to the source section; status
+- Each column: answer text (Markdown rendered with marked, sanitised with DOMPurify) with inline citation markers `[n]` → a side panel showing the cited section, with an "Open original" link when the manual has a `base_url`; status
   badge; metrics footer (time, tokens, cost, manuals used); collapsible **research trace**;
   **How it works** button (opens the strategy's Mermaid diagram); **1–5 star rating**.
 - **Mode toggle** (remembered in `localStorage`):
