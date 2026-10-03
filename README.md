@@ -12,5 +12,5 @@ AI assistant on a small set of user manuals that
 * Authors of the user manuals want to know about bugs, gaps and inconsistencies, redundancies in their user manuals.<br>Created automatically by the AI assistant.
 * Authors of the user manuals want to know about new use-cases and uncovered expectations of their users.<br>Created automatically by the AI assistant.
 
-Summary
+Summary<br>
 Users want quick and efficient solutions to their problem, rather than reading long manuals, wait long for a personal consultation or report bugs in a ticketing system, ... 
