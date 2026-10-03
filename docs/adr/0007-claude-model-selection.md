@@ -1,6 +1,6 @@
 # ADR 0007: Claude Opus 5.5 as the default model, with medium effort
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR 0011](0011-switch-default-model-to-sonnet-5-5.md)
 - **Date:** 2026-10-04
 
 ## Context

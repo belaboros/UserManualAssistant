@@ -1,7 +1,7 @@
 # UserManualAssistant v1 — Retrieval Strategy Comparison: Design
 
 - **Date:** 2026-10-04
-- **Status:** Draft, awaiting review
+- **Status:** Approved 2026-10-04
 - **Decisions:** see [`docs/adr/`](../../adr/)
 
 ## 1. Purpose
@@ -246,7 +246,7 @@ smart thermostat, its mobile app and its home hub), written with:
 ## 12. Configuration
 
 Environment variables (with `.env` support): `ANTHROPIC_API_KEY`, `UMA_MODEL` (default
-`claude-opus-5-5`, [ADR 0007](../../adr/0007-claude-model-selection.md)), `UMA_EFFORT` (default
+`claude-sonnet-5-5`, [ADR 0011](../../adr/0011-switch-default-model-to-sonnet-5-5.md)), `UMA_EFFORT` (default
 `medium`), `UMA_DB_PATH`, `UMA_MANUALS_DIR`, `WHOLE_CONTEXT_MAX_TOKENS`, `RAG_TOP_K`,
 `AGENT_MAX_TOOL_CALLS`, `STRATEGY_TIMEOUT_S`. Model prices live in one table in `config.py`.
 
