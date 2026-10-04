@@ -19,3 +19,4 @@ when to revisit it. Read them in order for a guided tour of the design. See
 | [0011](0011-switch-default-model-to-sonnet-5-5.md) | Switch the default model to Claude Sonnet 5.5 | Accepted |
 | [0012](0012-citation-mechanism-per-strategy.md) | Citation mechanism per strategy | Accepted |
 | [0013](0013-no-retrieval-baseline-strategy.md) | A no-retrieval baseline strategy as a control group | Accepted |
+| [0014](0014-agentic-web-strategy.md) | An "Agentic & web" strategy that checks the manuals against the web | Accepted |

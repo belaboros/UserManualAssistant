@@ -1,13 +1,13 @@
 flowchart LR
-    Q["Question"] -->|"question"| LP["Local phase<br/>search / read_section loop"]
-    DB[("SQLite corpus")] -->|"hits, section text"| LP
-    LP -->|"notes with [§id] markers"| FL{"finish_phase planner<br/>sufficient? gaps"}
-    LP -.->|"budget reached"| FC1["Force-close<br/>local phase"]
+    Q["Question"] -->|"question"| LP["Local phase<br/>list_manuals / search / read_section loop,<br/>at most 8 tool calls"]
+    DB[("SQLite corpus")] -->|"manual list, hits, section text"| LP
+    LP -->|"finish_phase: notes with [§id] markers"| FL{"Local planner<br/>sufficient? gaps"}
+    LP -.->|"budget used and no finish_phase<br/>on the next turn"| FC1["Force-close local phase<br/>gaps: budget exhausted"]
     FC1 --> FL
-    FL -->|"gaps to check"| WP["Web phase<br/>web_search loop,<br/>at least one search"]
-    WS["Web search<br/>Claude server tool"] -->|"results, URLs"| WP
-    WP -->|"notes with [web:url] markers"| FW{"finish_phase planner<br/>sufficient? gaps"}
-    WP -.->|"budget reached"| FC2["Force-close<br/>web phase"]
+    FL -->|"question + manual notes and gaps"| WP["Web phase<br/>web_search loop, at least one search,<br/>at most 8 searches"]
+    WS["Web search<br/>Claude server tool"] -->|"results with URLs"| WP
+    WP -->|"finish_phase: notes with [web:url] markers"| FW{"Web planner<br/>sufficient? gaps"}
+    WP -.->|"budget used and no finish_phase<br/>on the next turn, or too many pause_turns"| FC2["Force-close web phase"]
     FC2 --> FW
-    FW -->|"manual notes + web notes"| MG["Merge call<br/>no tools"]
-    MG -->|"streamed answer with [n] citations,<br/>⚠ conflict blocks"| UI["Web UI"]
+    FW -->|"manual notes + web notes,<br/>numbered web sources"| MG["Merge call<br/>no tools"]
+    MG -->|"streamed answer with [n] citations,<br/>⚠ conflict blocks, status"| UI["Web UI"]

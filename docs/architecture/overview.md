@@ -1,8 +1,8 @@
 # Architecture overview
 
-This demo answers one question four different ways, side by side, so you can see how each
+This demo answers one question five different ways, side by side, so you can see how each
 retrieval strategy moves information from the manuals to the answer, compared with a baseline that
-uses no manuals at all. This page is the map of the
+uses no manuals at all and with an agent that also checks the web. This page is the map of the
 code. Start with the picture, then read the units, then follow the two data flows.
 
 ## The big picture
@@ -16,19 +16,23 @@ flowchart LR
     API -->|"question"| S1["Whole-context"]
     API -->|"question"| S2["RAG"]
     API -->|"question"| S3["Agentic"]
+    API -->|"question"| S4["Agentic & web"]
     DB -->|"all sections"| S1
     DB -->|"chunks via hybrid search"| S2
     DB -->|"list_manuals, search, read_section"| S3
-    S0 & S1 & S2 & S3 -->|"streamed answer events"| API
+    DB -->|"list_manuals, search, read_section"| S4
+    WEB["Web search<br/>Claude server tool"] -->|"search results with URLs"| S4
+    S0 & S1 & S2 & S3 & S4 -->|"streamed answer events"| API
     API -->|"SSE"| UI
     UI -->|"votes"| API
     API -->|"question, answers, trace, votes"| LOG[("SQLite log<br/>questions, answers, votes")]
 ```
 
 Read it left to right. Manuals are loaded once into a SQLite database (ingestion). When someone asks
-a question, FastAPI starts all four strategies at the same time. The three retrieval strategies
+a question, FastAPI starts all five strategies at the same time. The retrieval strategies
 each read from the same database in its own way; the no-retrieval baseline reads nothing and answers
-from the model's own knowledge. Their answers stream back to the browser. Votes are saved in a second set of
+from the model's own knowledge; Agentic & web also searches the web through Claude's server-side
+search tool. Their answers stream back to the browser. Votes are saved in a second set of
 tables, the log.
 
 For the strategy-specific pictures see the "How it works" dialog in the app, or the documents in
@@ -44,11 +48,13 @@ For the strategy-specific pictures see the "How it works" dialog in the app, or 
 | Embedder | Turns text into vectors locally, for chunks at ingestion and for the question at search time. | [`uma/embedding.py`](../../uma/embedding.py) |
 | LLM wrapper | A thin layer over the Anthropic SDK (streaming, token counting) plus a `FakeLLM` used by tests. | [`uma/llm.py`](../../uma/llm.py) |
 | Strategy base | The event types (text, trace step, final, failed), the status-tag filter, the single-call helper and the citation helpers every strategy uses. | [`uma/strategies/base.py`](../../uma/strategies/base.py) |
-| Answering rules | The shared answering rules for the retrieval strategies, the agentic addendum, and the baseline's own rules. | [`uma/strategies/rules.py`](../../uma/strategies/rules.py) |
+| Answering rules | The shared answering rules for the retrieval strategies, the agentic addendum, the baseline's own rules, and the three Agentic & web prompts. | [`uma/strategies/rules.py`](../../uma/strategies/rules.py) |
 | No retrieval (baseline) | Sends only the question, with no manual content and no tools; the control group the other strategies are compared with. | [`uma/strategies/baseline.py`](../../uma/strategies/baseline.py) |
 | Whole-context | Puts every section of every manual into one prompt and lets Claude cite from it. | [`uma/strategies/whole_context.py`](../../uma/strategies/whole_context.py) |
 | RAG | Retrieves the best chunks first, then asks Claude to answer from only those. | [`uma/strategies/rag.py`](../../uma/strategies/rag.py) |
 | Agentic | Gives Claude tools to list, search and read, and lets it decide what to look at. | [`uma/strategies/agentic.py`](../../uma/strategies/agentic.py) |
+| Manual tools | The `list_manuals`, `search` and `read_section` tools, shared by Agentic and Agentic & web. | [`uma/strategies/manual_tools.py`](../../uma/strategies/manual_tools.py) |
+| Agentic & web | Researches the manuals, then the web, each phase ended by a `finish_phase` planner tool (in [`phase.py`](../../uma/strategies/phase.py)), then merges both into one answer with conflict blocks. | [`uma/strategies/agentic_web.py`](../../uma/strategies/agentic_web.py) |
 | Runner | Runs the strategies in parallel, enforces the timeout, merges their events into one stream and saves each result. | [`uma/runner.py`](../../uma/runner.py) |
 | Log | Stores questions, answers, metrics and votes. | [`uma/log.py`](../../uma/log.py) |
 | Leaderboard | Aggregates votes into per-strategy results. | [`uma/leaderboard.py`](../../uma/leaderboard.py) |
@@ -74,8 +80,8 @@ whole-context question and then stored in the database.
 
 1. The browser posts the question to `POST /api/questions`, which saves it and returns an id. The
    browser then opens `GET /api/questions/{id}/stream`, a Server-Sent Events connection.
-2. The runner starts the four strategies at once. Each has a 90 second timeout, and a failure in one
-   does not stop the others.
+2. The runner starts the five strategies at once. Each has a 90 second timeout (180 seconds for
+   Agentic & web), and a failure in one does not stop the others.
 3. **No retrieval (baseline)** sends only the question, with its own short rules
    (`BASELINE_RULES`: answer from your own knowledge, say when you don't know or may be out of
    date). It never touches the corpus, has no citations, and makes one small call.
@@ -89,9 +95,14 @@ whole-context question and then stored in the database.
    and `read_section` for at most 8 tool calls (`AGENT_MAX_TOOL_CALLS`). When the budget is reached
    it is told to answer with what it has. Its answer names sections with `[§id]` markers, which the
    strategy turns into numbered `[n]` citations.
-7. All four streams hide the trailing status tag (`answered`, `not_covered` or
+7. **Agentic & web** runs three phases: a local phase with the same manual tools (at most 8 calls),
+   a web phase with Claude's server-side web search (at least one, at most 8 searches), each ended
+   by a `finish_phase` planner call, and a streamed merge. Its answer cites manual sections and web
+   pages in one `[n]` numbering, and marks disagreements as "⚠ Conflict: the manual may be out of
+   date" blocks with the status `contradiction_found`.
+8. All five streams hide the trailing status tag (`answered`, `not_covered` or
    `contradiction_found`) from the visible text and report it separately.
-8. Every event carries the strategy id, so the browser fills the right column. The runner saves each
+9. Every event carries the strategy id, so the browser fills the right column. The runner saves each
    finished answer, its metrics and its trace to the log. Votes are posted later to `POST /api/votes`.
 
 ## Architecture decision records
@@ -111,3 +122,4 @@ Each decision behind this design is written up as an ADR. The [index](../adr/REA
 - [ADR 0011: Switch the default model to Claude Sonnet 5.5](../adr/0011-switch-default-model-to-sonnet-5-5.md)
 - [ADR 0012: Citation mechanism per strategy](../adr/0012-citation-mechanism-per-strategy.md)
 - [ADR 0013: A no-retrieval baseline strategy as a control group](../adr/0013-no-retrieval-baseline-strategy.md)
+- [ADR 0014: An "Agentic & web" strategy that checks the manuals against the web](../adr/0014-agentic-web-strategy.md)

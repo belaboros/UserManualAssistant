@@ -5,29 +5,43 @@ sequenceDiagram
     participant DB as Corpus
     participant W as Web search
     UI->>A: GET stream for question
-    Note over A,C: Local phase
-    loop until finish_phase or budget reached
-        A->>C: messages, local tools
-        C-->>A: tool_use search or read_section
-        A->>DB: search / read_section
-        DB-->>A: hits or section text
-        A-->>UI: SSE trace
-    end
-    C-->>A: finish_phase(sufficient, gaps)
-    Note over A,C: Web phase, at least one web_search
-    loop until finish_phase or budget reached
-        A->>C: messages, web_search server tool
-        C->>W: web_search (Claude's server tool)
-        W-->>C: results with URLs
-        opt pause_turn
-            C-->>A: pause_turn
-            Note over A: App re-sends the turn to resume
+    Note over A,C: Local phase, budget AGENT_WEB_LOCAL_MAX_TOOL_CALLS (8)
+    loop until finish_phase or force-close
+        A->>C: messages, manual tools + finish_phase
+        C-->>A: tool_use list_manuals, search or read_section
+        A->>DB: run the tool
+        DB-->>A: manual list, hits or section text
+        A-->>UI: SSE trace tool_call
+        opt 8 tool calls used
+            Note over A,C: tool_results + "Tool budget reached. Call finish_phase now".<br/>One more turn. No finish_phase: force-close, gaps "budget exhausted"
         end
-        C-->>A: notes with sources
-        A-->>UI: SSE trace
+        opt plain text and no tool call
+            Note over A,C: nudge "Call finish_phase to end this phase".<br/>A second plain-text turn force-closes with that text as notes
+        end
     end
-    C-->>A: finish_phase(sufficient, gaps)
-    A->>C: merge call, manual notes + web notes, no tools
-    C-->>A: streamed answer text
-    A-->>UI: SSE delta with [n] citations and ⚠ conflict blocks
-    A-->>UI: SSE final
+    C-->>A: finish_phase(sufficient, gaps, notes with [§id] markers)
+    A-->>UI: SSE trace planner (local)
+    Note over A,C: Web phase, budget AGENT_WEB_MAX_SEARCHES (8), at least one search
+    loop until finish_phase or force-close
+        A->>C: question, manual notes and gaps, web_search (max_uses = remaining, min 1) + finish_phase
+        C->>W: web_search query (runs on Anthropic's side)
+        W-->>C: results with URLs
+        opt stop_reason pause_turn
+            C-->>A: pause_turn
+            Note over A,C: App re-sends the conversation unchanged to resume.<br/>The 6th pause force-closes the web phase
+        end
+        C-->>A: server_tool_use and web_search_tool_result blocks
+        A->>A: number each result URL once
+        A-->>UI: SSE trace web_search (query, result count or error)
+        opt 8 searches used
+            Note over A,C: "Tool budget reached" notice. One more turn.<br/>No finish_phase: force-close, gaps "budget exhausted"
+        end
+    end
+    C-->>A: finish_phase(sufficient, gaps, notes with [web:url] markers)
+    A->>A: [web:url] to [web:n], drop URLs no search returned
+    A-->>UI: SSE trace planner (web)
+    A->>C: merge call: question, manual + web notes, numbered sources, no tools
+    C-->>A: streamed answer text with [§id] and [web:n] markers, status tag
+    A-->>UI: SSE delta, status tag hidden
+    A->>A: one [n] sequence for both kinds, conflict block forces contradiction_found
+    A-->>UI: SSE final: answer, citations, metrics

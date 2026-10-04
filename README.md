@@ -18,18 +18,19 @@ Users want quick and efficient solutions to their problem, rather than reading l
 
 ## v1: retrieval strategy comparison
 
-The first version is a side-by-side lab for one question: *how should an assistant find the right passage in a set of user manuals?* You ask a question once and four strategies answer it in parallel, each streaming into its own column, all using the same Claude model. The three retrieval strategies share the same answering rules; the fourth is a no-retrieval baseline:
+The first version is a side-by-side lab for one question: *how should an assistant find the right passage in a set of user manuals?* You ask a question once and five strategies answer it in parallel, each streaming into its own column, all using the same Claude model. Three manuals-only retrieval strategies share the same answering rules; a no-retrieval baseline shows what the model knows on its own; and a fifth strategy also checks the web:
 
 * **No retrieval** sends only the question, so you can see what the model knows on its own (the control group).
 * **Whole-context** puts every manual into the prompt.
 * **RAG** retrieves the most relevant chunks with local embeddings and full-text search, then answers from them.
 * **Agentic** lets Claude search and read the manuals with tools until it is satisfied.
+* **Agentic & web** researches the manuals like Agentic, then searches the web with Claude's web search tool, and merges both into one answer. Where the web disagrees with a manual it shows a "⚠ Conflict: the manual may be out of date" block, citing both sides.
 
 Each column shows the answer, its citations, a trace of the steps taken, and the time, token and cost figures. You can judge the answers yourself: vote for the best one, optionally in **blind mode**, which hides which strategy produced which column until you have voted. The ⤢ button in a column header maximizes that column (the others shrink to clickable strips); ⤡, `Esc` or clicking its title restores equal widths. The **leaderboard** page (`/leaderboard`) aggregates the votes, with filtering, export and reset.
 
 What you can learn from it: where each strategy is accurate, fast and cheap, where it misses content or gets expensive, and how each one handles questions the manuals do not cover or answer inconsistently. The sample corpus contains a deliberate contradiction (the thermostat factory-reset hold time) so you can see which strategies notice it.
 
-The only data stored is local, in `data/uma.db` (the ingested corpus, the question log and your votes). Nothing is sent anywhere except the prompts to the Anthropic API.
+The only data stored is local, in `data/uma.db` (the ingested corpus, the question log and your votes). Nothing is sent anywhere except the prompts to the Anthropic API; for the Agentic & web column that includes web searches, which Anthropic runs on the web.
 
 ## Quickstart
 
@@ -74,7 +75,7 @@ uv run python -m uma ingest --manuals-dir PATH       # reads another directory
 ## Learn how it works
 
 * [Architecture overview](docs/architecture/overview.md)
-* The four strategy explainers: [no retrieval](docs/strategies/0-baseline.md), [whole-context](docs/strategies/1-whole-context.md), [RAG](docs/strategies/2-rag.md), [agentic](docs/strategies/3-agentic.md)
+* The five strategy explainers: [no retrieval](docs/strategies/0-baseline.md), [whole-context](docs/strategies/1-whole-context.md), [RAG](docs/strategies/2-rag.md), [agentic](docs/strategies/3-agentic.md), [agentic & web](docs/strategies/4-agentic-web.md)
 * [Choosing a strategy](docs/choosing-a-strategy.md)
 * [Demo questions](docs/demo-questions.md) to try in the app
 * [Architecture decision records](docs/adr/README.md)

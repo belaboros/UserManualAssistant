@@ -23,6 +23,11 @@ def test_overview_diagram_shows_baseline():
     assert 'S0["No retrieval"]' in src and "S0 & S1 & S2 & S3" in src
 
 
+def test_overview_diagram_shows_agentic_web():
+    src = (STATIC / "diagrams" / "overview.mmd").read_text()
+    assert 'S4["Agentic & web"]' in src and "S0 & S1 & S2 & S3 & S4" in src
+
+
 def test_every_api_diagram_exists(tmp_path):
     settings = Settings(db_path=tmp_path / "uma.db")
     client = TestClient(create_app(settings, llm=FakeLLM([]), embedder=object()))
@@ -47,6 +52,7 @@ STRATEGY_DOCS = [
     ("whole_context", "1-whole-context.md"),
     ("rag", "2-rag.md"),
     ("agentic", "3-agentic.md"),
+    ("agentic_web", "4-agentic-web.md"),
 ]
 
 EXPLAINER_HEADINGS = [
