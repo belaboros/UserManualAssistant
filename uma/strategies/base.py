@@ -27,6 +27,8 @@ class Citation:
     section_id: str
     heading_path: tuple[str, ...]
     cited_text: str
+    kind: Literal["manual", "web"] = "manual"
+    url: str | None = None
 
 
 @dataclass
@@ -36,6 +38,7 @@ class Metrics:
     cost_usd: float | None
     manuals_used: list[str]
     tool_calls: int = 0
+    web_searches: int = 0
 
 
 @dataclass

@@ -24,3 +24,11 @@ def test_cost_sonnet():
 
 def test_cost_unknown_model_is_none():
     assert cost_usd("mystery-model", 10, 10) is None
+
+
+def test_agent_web_defaults_and_env():
+    s = load_settings({})
+    assert (s.agent_web_local_max_tool_calls, s.agent_web_max_searches, s.agent_web_timeout_s) == (8, 8, 180.0)
+    s = load_settings({"AGENT_WEB_LOCAL_MAX_TOOL_CALLS": "3", "AGENT_WEB_MAX_SEARCHES": "2",
+                       "AGENT_WEB_TIMEOUT_S": "60"})
+    assert (s.agent_web_local_max_tool_calls, s.agent_web_max_searches, s.agent_web_timeout_s) == (3, 2, 60.0)

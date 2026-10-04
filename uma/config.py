@@ -16,6 +16,13 @@ class Settings:
     rag_top_k: int = 8
     agent_max_tool_calls: int = 8
     strategy_timeout_s: float = 90.0
+    agent_web_local_max_tool_calls: int = 8
+    agent_web_max_searches: int = 8
+    agent_web_timeout_s: float = 180.0
+
+
+# Anthropic web search tool price: USD per search.
+WEB_SEARCH_USD_PER_SEARCH: float = 0.01
 
 
 def load_settings(env: Mapping[str, str] = os.environ) -> Settings:
@@ -29,6 +36,10 @@ def load_settings(env: Mapping[str, str] = os.environ) -> Settings:
         rag_top_k=int(env.get("RAG_TOP_K", d.rag_top_k)),
         agent_max_tool_calls=int(env.get("AGENT_MAX_TOOL_CALLS", d.agent_max_tool_calls)),
         strategy_timeout_s=float(env.get("STRATEGY_TIMEOUT_S", d.strategy_timeout_s)),
+        agent_web_local_max_tool_calls=int(
+            env.get("AGENT_WEB_LOCAL_MAX_TOOL_CALLS", d.agent_web_local_max_tool_calls)),
+        agent_web_max_searches=int(env.get("AGENT_WEB_MAX_SEARCHES", d.agent_web_max_searches)),
+        agent_web_timeout_s=float(env.get("AGENT_WEB_TIMEOUT_S", d.agent_web_timeout_s)),
     )
 
 

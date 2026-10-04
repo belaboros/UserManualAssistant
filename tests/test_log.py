@@ -11,6 +11,38 @@ def make_answer(text="Hold the button [1].", status="answered"):
     return Answer(text, [cit], status, metrics)
 
 
+def test_web_searches_roundtrip(tmp_path):
+    log = Log(tmp_path / "uma.db")
+    qid = log.create_question("q?", blind=False)
+    web = Citation("example.com", "Page", "https://example.com/a", (), "", kind="web", url="https://example.com/a")
+    metrics = Metrics(10, Usage(1, 1, 0, 0), 0.01, [], web_searches=3)
+    log.save_answer(qid, "agentic_web", answer=Answer("t [1]", [web], "answered", metrics), error=None, trace=[])
+    row = log.answers_for(qid)["agentic_web"]
+    assert row["web_searches"] == 3 and row["answer"]["metrics"]["web_searches"] == 3
+    assert row["citations"][0]["kind"] == "web" and row["citations"][0]["url"] == "https://example.com/a"
+
+
+def test_old_database_gains_web_searches_column(tmp_path):
+    import sqlite3
+    from contextlib import closing
+
+    path = tmp_path / "old.db"
+    with closing(sqlite3.connect(path)) as c, c:
+        c.execute(
+            "CREATE TABLE answers(question_id TEXT NOT NULL, strategy TEXT NOT NULL, status TEXT NOT NULL,"
+            " text TEXT, citations_json TEXT, trace_json TEXT NOT NULL, error TEXT,"
+            " latency_ms INTEGER, input_tokens INTEGER, output_tokens INTEGER,"
+            " cache_read_tokens INTEGER, cache_write_tokens INTEGER, cost_usd REAL,"
+            " manuals_used_json TEXT, tool_calls INTEGER, PRIMARY KEY(question_id, strategy))"
+        )
+        c.execute("INSERT INTO answers(question_id, strategy, status, text, trace_json)"
+                  " VALUES('q','rag','answered','t','[]')")
+    log = Log(path)
+    assert log.answers_for("q")["rag"]["web_searches"] == 0
+    log.save_answer("q2", "rag", answer=make_answer(), error=None, trace=[])
+    assert log.answers_for("q2")["rag"]["web_searches"] == 0
+
+
 @pytest.fixture
 def log(tmp_path):
     return Log(tmp_path / "uma.db")

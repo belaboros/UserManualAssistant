@@ -20,6 +20,15 @@ CIT = {
 CIT_BY_ID = {"m:a:x": CIT["hub"]}
 
 
+def test_web_citation_serialises():
+    web = Citation("example.com", "Page", "https://example.com/a", (), "", kind="web", url="https://example.com/a")
+    answer = Answer("x [1]", [web], "answered", Metrics(1, Usage(1, 1, 0, 0), None, []))
+    d = answer_to_dict(answer)
+    assert d["citations"][0]["kind"] == "web" and d["citations"][0]["url"] == "https://example.com/a"
+    json.dumps(d)
+    assert CIT["hub"].kind == "manual" and CIT["hub"].url is None
+
+
 def run(chunks):
     f = StatusTagFilter()
     shown = "".join(f.feed(c) for c in chunks)
