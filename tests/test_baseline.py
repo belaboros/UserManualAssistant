@@ -35,6 +35,15 @@ def test_baseline_rules_do_not_restrict_to_manuals():
     assert "training cutoff" in BASELINE_RULES
 
 
+def test_baseline_rules_tag_hedged_answers_as_not_covered():
+    # A caveat-only answer to a recent or date-specific question is not an answer.
+    assert ("When the question depends on recent or date-specific information and you answer only "
+            "with a caveat that your knowledge may be out of date, use <status>not_covered</status>"
+            in " ".join(BASELINE_RULES.split()))
+    assert ("Use <status>answered</status> only when you are confident your knowledge answers "
+            "the question" in " ".join(BASELINE_RULES.split()))
+
+
 async def test_streams_text_and_parses_answered_status():
     llm = FakeLLM([text_response("Wi-Fi is wireless networking.\n<status>answered</status>")])
     events = await _run(llm)

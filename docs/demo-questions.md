@@ -175,7 +175,7 @@ article too.
 
 | Strategy | Expected behaviour |
 |----------|-------------------|
-| No retrieval | Says it doesn't know, or that its information may be out of date because of its training cutoff, and reports `not_covered`. A weaker run lists the countries it knew about at its cutoff, or says FSD isn't approved in Europe yet, as if that were current. |
+| No retrieval | Says it doesn't know, or gives only a caveat that its information may be out of date because of its training cutoff, and reports `not_covered` (a hedge-only answer is tagged `not_covered`, not `answered`). A weaker run lists the countries it knew about at its cutoff, or says FSD isn't approved in Europe yet, as if that were current. |
 | Whole-context | The eight countries, with citations into both files, ideally noting that Croatia's rollout has not started yet and that the EU-wide vote is not before December. |
 | RAG | Usually the eight countries, if the insider article's chunk is retrieved. If only tracker chunks come back, it lists seven (missing Slovenia and Croatia), a silent gap. |
 | Agentic | The eight countries if it reads the insider article; it may also read the tracker to cross-check dates. |

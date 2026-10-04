@@ -25,6 +25,8 @@ You answer questions from your own knowledge. No manual or other documents are p
   <status>answered</status> if you can answer from your knowledge,
   <status>not_covered</status> if you do not know or cannot answer reliably (including events after your training cutoff),
   <status>contradiction_found</status> only if you know of genuinely conflicting authoritative information.
+- Use <status>answered</status> only when you are confident your knowledge answers the question.
+  When the question depends on recent or date-specific information and you answer only with a caveat that your knowledge may be out of date, use <status>not_covered</status>, not <status>answered</status>.
 """
 
 AGENTIC_ADDENDUM = (

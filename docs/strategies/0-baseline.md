@@ -72,9 +72,10 @@ for every strategy. The strategy itself never opens the corpus.
    `ANSWERING_RULES` rather than adding to them: there is no "only from the manual content" rule and
    no citation rule. It keeps the three status values so the badge means the same thing in every
    column ([ADR 0009](../adr/0009-answer-status-tag-protocol.md)):
-   - `answered` when the model can answer from its own knowledge;
+   - `answered` only when the model is confident its own knowledge answers the question;
    - `not_covered` when it doesn't know or can't answer reliably, including events after its
-     training cutoff;
+     training cutoff, and when a question about recent or date-specific information gets only a
+     "my knowledge may be out of date" caveat instead of an answer;
    - `contradiction_found` only if it knows of genuinely conflicting authoritative information.
 3. **Call Claude once, streaming.** [`run_single_call`](../../uma/strategies/base.py) sends one user
    message whose content is the plain question text: no `document` blocks, no `tools`. The request
@@ -152,6 +153,9 @@ other strategies is one more small call per question.
 - **Outdated answers.** Asked about something that changed after the training cutoff, the model may
   describe the old state of affairs. The rules ask it to flag this, and a good answer does, but it
   can't know *what* changed.
+- **No sense of today's date.** The baseline is not told the current date, so a question like "on
+  4-OCT-2026" depends on the model's own sense of time. This is a deliberate control-group choice:
+  the column shows what the model does with nothing but its training.
 - **No citations.** Even a correct answer can't be verified from the app. The footer's "manuals
   used" is always empty.
 - **Status is self-assessed.** `not_covered` here means "the model judged that it doesn't know",

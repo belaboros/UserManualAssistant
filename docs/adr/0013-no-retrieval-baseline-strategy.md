@@ -50,6 +50,7 @@ Use option 1:
 - Every question now makes one extra, small model call (a couple of hundred input tokens plus the answer), which adds a little to cost per question and nothing noticeable to latency, since the strategies run in parallel.
 - The baseline's answers never have citations, and its status is the model's self-assessment rather than a judgement about the manuals. The explainer and the demo questions point this out.
 - In blind mode the baseline column is often recognisable because it has no `[n]` markers. That is inherent to the comparison.
+- The baseline is still blocked when no manuals are ingested: `POST /api/questions` returns 409 for an empty corpus. This is by design, because the app compares all four strategies, so a question needs a corpus even though the baseline never reads it.
 - The live smoke test (`tests/test_live.py`) still checks the three retrieval strategies only, since it asserts that the manuals' planted contradiction is found.
 
 ## Revisit when
