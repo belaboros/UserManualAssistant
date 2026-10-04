@@ -24,6 +24,8 @@ button:disabled { cursor: not-allowed; opacity: .5; }
 .topbar h1 { font-size: 1.15rem; margin: 0; }
 .topbar nav { display: flex; gap: 1rem; flex: 1; }
 main { max-width: 1400px; margin: 0 auto; padding: 1rem; }
+/* The Ask page spans the whole window so the answer columns grow and shrink with it. */
+main.wide { max-width: none; }
 #corpus-warning { background: var(--warn-bg); color: var(--warn-fg); padding: .75rem 1rem;
   border-radius: 6px; margin-bottom: 1rem; }
 #question-form label { display: block; font-weight: 600; margin-bottom: .25rem; }

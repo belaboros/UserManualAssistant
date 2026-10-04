@@ -102,3 +102,12 @@ def test_conflict_regex_accepts_emoji_variation(tmp_path):
         assert re.match(pattern, prefix), prefix
     assert not re.match(pattern, "Conflict")
     assert '" web search"' in js and '" web searches"' in js
+
+
+def test_ask_page_uses_full_width_leaderboard_keeps_cap(tmp_path):
+    client, _ = make_client(tmp_path)
+    assert '<main class="wide">' in client.get("/").text
+    assert '<main>' in client.get("/leaderboard").text
+    css = client.get("/static/style.css").text
+    assert re.search(r"main\.wide\s*\{[^}]*max-width:\s*none", css)
+    assert re.search(r"(?m)^main\s*\{[^}]*max-width:\s*1400px", css)
