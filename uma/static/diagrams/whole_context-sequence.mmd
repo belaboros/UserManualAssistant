@@ -21,10 +21,10 @@ sequenceDiagram
         S-->>R: Failed, corpus too large
     else within limit
         S->>C: stream(documents with cache breakpoint, question)
-        alt first question
+        alt first question, or after an idle gap
             Note over C: cache write of the document prefix
-        else later questions
-            Note over C: cache read of the document prefix
+        else later question within the cache lifetime
+            Note over C: cache read, lifetime about 5 min, refreshed on each hit
         end
         loop streamed text
             C-->>S: text delta

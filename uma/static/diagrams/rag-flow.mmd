@@ -1,13 +1,14 @@
 flowchart LR
-    Q["Question"] --> E["Local embedder"]
-    Q --> B["FTS5 BM25"]
-    DB[("SQLite chunks")] --> E
-    DB --> B
-    E -->|"30 vector candidates"| R["RRF fusion<br/>k = 60"]
-    B -->|"30 keyword candidates"| R
+    Q["Question"] -->|"question"| E["Local embedder"]
+    E -->|"query vector"| VR["Vector ranking<br/>cosine"]
+    DB[("SQLite corpus")] -->|"stored chunk vectors"| VR
+    Q -->|"question"| BM["FTS5 BM25"]
+    DB -->|"FTS5 index"| BM
+    VR -->|"30 vector candidates"| R["RRF fusion<br/>k = 60"]
+    BM -->|"30 keyword candidates"| R
     R -->|"ranked chunks"| V["Coverage rule<br/>top-k plus best chunk of each manual<br/>scoring at least 50 percent of the top"]
-    V -->|"top-k chunks"| T["Retrieval trace event"]
-    V -->|"top-k chunks as documents,<br/>then the question"| C["Claude"]
+    V -->|"selected chunks, top-k plus coverage additions"| T["Retrieval trace event"]
+    V -->|"selected chunks as documents,<br/>then the question"| C["Claude"]
     C -->|"answer text, citations,<br/>status tag"| F["Status filter and<br/>citation resolver"]
-    T -->|"retrieved chunks"| UI["Web UI"]
+    T -->|"retrieved chunks, sent before the Claude call"| UI["Web UI"]
     F -->|"answer with [n] citations,<br/>status"| UI

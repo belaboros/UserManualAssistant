@@ -11,16 +11,16 @@ flowchart LR
     M["Manual files<br/>HTML / Markdown"] -->|"files per manual"| I["Ingestion"]
     I -->|"sections, chunks,<br/>embeddings, FTS index"| DB[("SQLite corpus")]
     UI["Web UI"] -->|"question"| API["FastAPI"]
-    API --> S1["Whole-context"]
-    API --> S2["RAG"]
-    API --> S3["Agentic"]
+    API -->|"question"| S1["Whole-context"]
+    API -->|"question"| S2["RAG"]
+    API -->|"question"| S3["Agentic"]
     DB -->|"all sections"| S1
     DB -->|"chunks via hybrid search"| S2
-    DB -->|"search and read_section"| S3
+    DB -->|"list_manuals, search, read_section"| S3
     S1 & S2 & S3 -->|"streamed answer events"| API
     API -->|"SSE"| UI
     UI -->|"votes"| API
-    API --> LOG[("SQLite log<br/>questions, answers, votes")]
+    API -->|"question, answers, trace, votes"| LOG[("SQLite log<br/>questions, answers, votes")]
 ```
 
 Read it left to right. Manuals are loaded once into a SQLite database (ingestion). When someone asks
@@ -38,6 +38,7 @@ For the strategy-specific pictures see the "How it works" dialog in the app, or 
 | Ingestion | Reads each manual folder, splits HTML or Markdown into sections, cuts sections into chunks, computes embeddings and writes everything to the corpus tables. | [`uma/corpus/ingest.py`](../../uma/corpus/ingest.py) |
 | Corpus store | Reads and writes manuals, sections, chunks, embeddings, the FTS5 keyword index and the stored whole-context token count. | [`uma/corpus/store.py`](../../uma/corpus/store.py) |
 | Hybrid search | Finds chunks by keywords (BM25) and by meaning (vector cosine), merges the two rankings with reciprocal rank fusion, and applies the coverage rule for RAG. | [`uma/search.py`](../../uma/search.py) |
+| Embedder | Turns text into vectors locally, for chunks at ingestion and for the question at search time. | [`uma/embedding.py`](../../uma/embedding.py) |
 | LLM wrapper | A thin layer over the Anthropic SDK (streaming, token counting) plus a `FakeLLM` used by tests. | [`uma/llm.py`](../../uma/llm.py) |
 | Strategy base | The event types (text, trace step, final, failed), the shared answer rules, the status-tag filter and the citation helpers every strategy uses. | [`uma/strategies/base.py`](../../uma/strategies/base.py) |
 | Whole-context | Puts every section of every manual into one prompt and lets Claude cite from it. | [`uma/strategies/whole_context.py`](../../uma/strategies/whole_context.py) |
@@ -72,7 +73,7 @@ whole-context question and then stored in the database.
    does not stop the others.
 3. **Whole-context** sends all sections, grouped as one document per manual, with a cache marker
    after the last document. Claude cites the exact section blocks it used. The first question also
-   measures and stores the token count, and writes the prompt cache. Later questions read the cache.
+   measures and stores the token count, and writes the prompt cache. Later questions within the cache lifetime (about 5 minutes, refreshed on each hit) read the cache; after an idle gap the cache is written again.
 4. **RAG** runs hybrid search (keyword plus vector, merged by RRF), applies the coverage rule so
    every relevant manual is represented, sends the retrieved chunks to the browser as a trace
    step, and only then calls Claude with those chunks as documents.

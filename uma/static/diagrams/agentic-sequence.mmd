@@ -7,35 +7,45 @@ sequenceDiagram
     participant C as Claude API
     UI->>R: GET stream for question
     R->>S: answer(question)
+    Note over S,C: at most AGENT_MAX_TOOL_CALLS + 2 model turns,<br/>otherwise Failed "The agent did not finish within its tool budget"
     S->>C: stream(question, tools)
-    loop up to AGENT_MAX_TOOL_CALLS tool calls
-        C-->>S: assistant turn with tool_use blocks
+    loop each model turn, while the model asks for tools
+        C-->>S: assistant turn, text and tool_use blocks
+        S-->>R: TextDelta for any text, also on intermediate turns
+        R-->>UI: SSE delta
         S->>S: echo assistant turn into messages
-        alt tool budget not reached
-            alt list_manuals
-                S->>DB: manuals
-                DB-->>S: id, title, owner, section count
-            else search
-                S->>H: hybrid_search(query, k=8, manual_id)
-                H->>DB: FTS5 and vector candidates
-                DB-->>H: chunks
-                H-->>S: top hits
-            else read_section
-                S->>DB: section(section_id)
-                DB-->>S: heading path and full text
+        loop each tool_use block
+            alt call number within AGENT_MAX_TOOL_CALLS
+                alt list_manuals
+                    S->>DB: manuals
+                    DB-->>S: id, title, owner, section count
+                else search
+                    S->>H: hybrid_search(query, k=8, manual_id)
+                    H->>DB: FTS5 and vector candidates
+                    DB-->>H: chunks
+                    H-->>S: top hits
+                else read_section
+                    S->>DB: section(section_id)
+                    DB-->>S: heading path and full text
+                end
+                S-->>R: TraceStep tool_call, name, input, summary
+                R-->>UI: SSE trace
+            else call number over the budget
+                Note over S: tool_result is_error: "Tool budget exhausted. Answer now."
             end
-            S-->>R: TraceStep tool_call, name, input, summary
-            R-->>UI: SSE trace
-        else budget reached
-            Note over S: remaining tool_use blocks get an is_error<br/>tool_result, plus a notice to answer now
+        end
+        opt calls so far at least AGENT_MAX_TOOL_CALLS
+            Note over S: append text block: "Tool budget reached. Answer now with what you have."
         end
         S->>C: one user message with all tool_results
     end
-    C-->>S: final text with section id markers, status tag
+    C-->>S: final text with [§id] markers, status tag
     S-->>R: TextDelta without status tag
     R-->>UI: SSE delta
-    S->>DB: look up each cited section
-    S->>S: resolve section markers to [n], strip status tag
+    S->>S: strip status tag
+    S->>DB: resolve each [§id] marker, look up section
+    DB-->>S: manual and heading path
+    S->>S: replace markers with [n], build citations
     S-->>R: Final answer, citations, metrics
     R-->>UI: SSE final
     R->>DB: save answer and trace to log
