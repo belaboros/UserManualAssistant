@@ -74,7 +74,11 @@ class AgenticStrategy:
 
     def __init__(self, store: CorpusStore, embedder: Embedder, llm: LLM, settings: Settings) -> None:
         self.store, self.embedder, self.llm, self.settings = store, embedder, llm, settings
-        self._titles = {m.meta.id: m.meta.title for m in store.manuals()}
+
+    @property
+    def _titles(self) -> dict[str, str]:
+        # Read per use so manuals ingested while the server runs are picked up.
+        return {m.meta.id: m.meta.title for m in self.store.manuals()}
 
     # --- tools -------------------------------------------------------------------------
 

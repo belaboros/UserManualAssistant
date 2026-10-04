@@ -1,5 +1,6 @@
 """FastAPI app: question streaming over SSE, votes, leaderboard and static pages."""
 
+import asyncio
 import csv
 import io
 import json
@@ -11,6 +12,7 @@ from typing import Literal
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.background import BackgroundTask
 from pydantic import BaseModel
 
 from uma.config import Settings
@@ -57,6 +59,7 @@ def _sse(payload: dict) -> str:
 
 
 def _replay(stored: dict[str, dict]) -> list[dict]:
+    """Stored final/failed payloads in STRATEGY_ORDER (no trailing done)."""
     out = []
     for sid in STRATEGY_ORDER:
         a = stored.get(sid)
@@ -66,7 +69,7 @@ def _replay(stored: dict[str, dict]) -> list[dict]:
             out.append({"strategy": sid, "type": "failed", "message": a["error"], "hint_doc": None})
         else:
             out.append({"strategy": sid, "type": "final", "answer": a["answer"]})
-    return out + [{"type": "done"}]
+    return out
 
 
 def create_app(
@@ -86,7 +89,9 @@ def create_app(
     }
     ordered = [strategies[i] for i in STRATEGY_ORDER]
 
-    app = FastAPI(title="UserManualAssistant")
+    app = FastAPI(
+        title="UserManualAssistant", docs_url="/api/docs", redoc_url=None, openapi_url="/api/openapi.json"
+    )
     app.state.settings, app.state.log, app.state.store = settings, log, store
     # Question ids whose strategies are running now. A concurrent second stream request for
     # the same id gets 409 rather than a second run (or a partial replay).
@@ -133,34 +138,46 @@ def create_app(
         return {"question_id": log.create_question(text, body.blind)}
 
     @app.get("/api/questions/{question_id}/stream")
-    def api_stream(question_id: str) -> StreamingResponse:
-        question = log.get_question(question_id)
-        if question is None:
-            raise HTTPException(404, "Unknown question")
+    async def api_stream(question_id: str) -> StreamingResponse:
+        # Check-and-add with no await in between, so two requests cannot both pass.
         if question_id in app.state.running:
             raise HTTPException(409, "This question is already running")
-        stored = log.answers_for(question_id)
-        headers = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
-
-        if stored:
-            async def replay() -> AsyncIterator[str]:
-                for p in _replay(stored):
-                    yield _sse(p)
-
-            return StreamingResponse(replay(), media_type="text/event-stream", headers=headers)
-
         app.state.running.add(question_id)
 
-        async def live() -> AsyncIterator[str]:
-            try:
-                async for p in run_question(
-                    question_id, question["text"], ordered, log, settings.strategy_timeout_s
-                ):
-                    yield _sse(p)
-            finally:
-                app.state.running.discard(question_id)
+        def release() -> None:  # idempotent
+            app.state.running.discard(question_id)
 
-        return StreamingResponse(live(), media_type="text/event-stream", headers=headers)
+        try:
+            question = await asyncio.to_thread(log.get_question, question_id)
+            if question is None:
+                raise HTTPException(404, "Unknown question")
+            stored = await asyncio.to_thread(log.answers_for, question_id)
+        except BaseException:
+            release()
+            raise
+        # Strategies cancelled mid-run (client disconnect) leave no answer: run only those again.
+        missing = [s for s in ordered if s.id not in stored]
+        replayed = _replay(stored)
+        headers = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
+
+        async def body() -> AsyncIterator[str]:
+            try:
+                for p in replayed:
+                    yield _sse(p)
+                if missing:
+                    async for p in run_question(
+                        question_id, question["text"], missing, log, settings.strategy_timeout_s
+                    ):
+                        yield _sse(p)
+                else:
+                    yield _sse({"type": "done"})
+            finally:
+                release()
+
+        # The background task releases the guard even if the body is never iterated.
+        return StreamingResponse(
+            body(), media_type="text/event-stream", headers=headers, background=BackgroundTask(release)
+        )
 
     @app.get("/api/sections/{section_id}")
     def api_section(section_id: str) -> dict:

@@ -1,4 +1,7 @@
+import asyncio
 import json
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -60,15 +63,58 @@ def test_stream_replay_does_not_rerun(client_with_fake_llm):
     second = stream(client, qid)
     assert len(llm.calls) == calls
     assert set(finals(first)) == set(finals(second)) == set(STRATEGY_ORDER)
-    assert {s: p["type"] for s, p in finals(first).items()} == {s: p["type"] for s, p in finals(second).items()}
+    assert finals(first) == finals(second)
     assert second[-1] == {"type": "done"}
 
 
-def test_concurrent_stream_returns_409(client_with_fake_llm):
-    client, _ = client_with_fake_llm
+class BlockingLLM(FakeLLM):
+    def __init__(self, responses, gate):
+        super().__init__(responses)
+        self.gate = gate
+
+    async def stream(self, **kw):
+        while not self.gate.is_set():
+            await asyncio.sleep(0.01)
+        async for ev in super().stream(**kw):
+            yield ev
+
+
+def test_concurrent_stream_returns_409_then_replays(tmp_path):
+    gate = threading.Event()
+    client, llm = make_client(tmp_path, llm=BlockingLLM([text_response(ANSWER) for _ in range(3)], gate))
     qid = ask(client)
-    client.app.state.running.add(qid)
+    result = {}
+    t = threading.Thread(target=lambda: result.setdefault("p", stream(client, qid)))
+    t.start()
+    for _ in range(500):
+        if qid in client.app.state.running:
+            break
+        time.sleep(0.01)
     assert client.get(f"/api/questions/{qid}/stream").status_code == 409
+    gate.set()
+    t.join(timeout=10)
+    assert result["p"][-1] == {"type": "done"}
+    calls = len(llm.calls)
+    again = stream(client, qid)
+    assert len(llm.calls) == calls and again[-1] == {"type": "done"}
+
+
+def test_partial_answers_run_only_missing_strategies(client_with_fake_llm):
+    client, llm = client_with_fake_llm
+    qid = ask(client)
+    client.app.state.log.save_answer(qid, "rag", answer=None, error="boom", trace=[])
+    payloads = stream(client, qid)
+    f = finals(payloads)
+    assert set(f) == set(STRATEGY_ORDER) and payloads[-1] == {"type": "done"}
+    assert f["rag"]["type"] == "failed" and f["rag"]["message"] == "boom"
+    assert llm.calls  # the other two strategies actually ran
+    assert len(llm.calls) == 2
+    assert set(client.app.state.log.answers_for(qid)) == set(STRATEGY_ORDER)
+
+
+def test_swagger_does_not_shadow_docs_mount(client_with_fake_llm):
+    client, _ = client_with_fake_llm
+    assert client.get("/api/docs").status_code == 200
 
 
 def test_stream_releases_running_guard(client_with_fake_llm):
