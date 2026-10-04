@@ -28,9 +28,19 @@ FINISH_PHASE_TOOL: dict = {
     },
 }
 
+
+def web_search_tool(max_uses: int) -> dict:
+    """The server-side web search tool; Anthropic runs the searches, the client only echoes the blocks."""
+    return {"type": "web_search_20260209", "name": "web_search", "max_uses": max_uses}
+
+
 _BUDGET_NOTICE = "Tool budget reached. Call finish_phase now with what you have."
 _EXHAUSTED = "Tool budget exhausted."
 _NUDGE = "Call finish_phase to end this phase."
+_SEARCH_REMINDER = "Search the web at least once before finishing."
+_UNAVAILABLE = "Web search was unavailable."
+_MAX_RESUMPTIONS = 5
+_EXTRA_REQUESTS = 4  # nudge, budget notice and slack, on top of budget + resumptions
 
 
 @dataclass
@@ -55,13 +65,37 @@ async def run_phase(
     budget: int,
     sources: WebSources | None = None,
 ) -> AsyncIterator[TraceStep | PhaseResult | Failed]:
-    """Yield trace steps, then exactly one PhaseResult or Failed."""
-    all_tools = [*tools, FINISH_PHASE_TOOL]
+    """Yield trace steps, then exactly one PhaseResult or Failed.
+
+    In the web phase the budget counts server-side searches, `pause_turn` is resumed without a new
+    user message, finish_phase is refused until one search has run, and notes get numbered web markers.
+    """
+    web = phase == "web"
+    if web and sources is None:
+        sources = WebSources()
     messages: list[dict] = [{"role": "user", "content": prompt}]
     usage, calls, web_searches = Usage(), 0, 0
+    requests = pauses = 0
+    max_requests = budget + _MAX_RESUMPTIONS + _EXTRA_REQUESTS
+    queries: dict[str, object] = {}  # server_tool_use id -> query, until its result arrives
+    searched_ok = resuming = False
+    turn_text = ""  # assistant text of the current turn, across pause_turn resumptions
     noticed = nudged = nudged_last = False
 
+    def request_tools() -> list[dict]:
+        if not web:
+            return [*tools, FINISH_PHASE_TOOL]
+        return [*tools, web_search_tool(max(budget - web_searches, 1)), FINISH_PHASE_TOOL]
+
+    def budget_reached() -> bool:
+        return (web_searches if web else calls) >= budget
+
     def close(sufficient: bool, gaps: list[str], notes: str, forced: bool):
+        if web:
+            if web_searches and not searched_ok:
+                sufficient, notes = False, _UNAVAILABLE
+            else:
+                notes = sources.rewrite(notes)
         detail = {"phase": phase, "sufficient": sufficient, "gaps": gaps, "forced": forced}
         return (TraceStep("planner", detail),
                 PhaseResult(sufficient, gaps, notes, usage, calls, web_searches, forced))
@@ -71,9 +105,15 @@ async def run_phase(
         return close(bool(args.get("sufficient")), list(args.get("gaps") or []), str(args.get("notes") or ""), forced)
 
     while True:
+        if requests >= max_requests:
+            # Defensive cap: closes like the budget case, without another request.
+            for item in close(False, ["budget exhausted"], turn_text, True):
+                yield item
+            return
+        requests += 1
         response: LLMResponse | None = None
         try:
-            async for event in llm.stream(system=system, messages=list(messages), tools=all_tools):
+            async for event in llm.stream(system=system, messages=list(messages), tools=request_tools()):
                 if isinstance(event, Completed):
                     response = event.response
         except LLMError as e:
@@ -95,31 +135,74 @@ async def run_phase(
         uses = [b for b in response.content if b.get("type") == "tool_use"]
         finish = next((b for b in uses if b.get("name") == "finish_phase"), None)
         text = "".join(b.get("text", "") for b in response.content if b.get("type") == "text")
+        turn_text = turn_text + text if resuming else text
+
+        if web:
+            for block in response.content:
+                kind = block.get("type")
+                if kind == "server_tool_use" and block.get("name") == "web_search":
+                    web_searches += 1
+                    queries[block.get("id")] = (block.get("input") or {}).get("query")
+                elif kind == "web_search_tool_result":
+                    query, content = queries.pop(block.get("tool_use_id"), None), block.get("content")
+                    if isinstance(content, list):
+                        searched_ok = True
+                        for r in content:
+                            if r.get("type") == "web_search_result" and r.get("url"):
+                                sources.add(r["url"], r.get("title") or r["url"])
+                        yield TraceStep("web_search", {"phase": phase, "query": query, "result_count": len(content)})
+                    else:
+                        error_code = content.get("error_code") if isinstance(content, dict) else None
+                        yield TraceStep("web_search", {"phase": phase, "query": query, "error_code": error_code})
+
+        if response.stop_reason == "pause_turn":
+            # The API resumes a paused turn when the conversation is sent back unchanged.
+            pauses += 1
+            if pauses > _MAX_RESUMPTIONS:
+                for item in close(False, ["web search paused too often"], turn_text, True):
+                    yield item
+                return
+            resuming = True
+            continue
+        resuming = False
 
         if noticed:
             # One turn after the budget notice; tools it calls are not run.
-            for item in close(False, ["budget exhausted"], text, True) if finish is None else finished(finish, True):
+            for item in close(False, ["budget exhausted"], turn_text, True) if finish is None else finished(finish, True):
                 yield item
             return
         if not uses:
             if nudged:
-                for item in close(False, ["did not call finish_phase"], text, True):
+                for item in close(False, ["did not call finish_phase"], turn_text, True):
                     yield item
                 return
+            if web and budget_reached():
+                # Searches in this turn used up the budget.
+                noticed = True
+                messages.append({"role": "user", "content": _BUDGET_NOTICE})
+                continue
             nudged = nudged_last = True
-            messages.append({"role": "user", "content": _NUDGE})
+            nudge = f"{_SEARCH_REMINDER} {_NUDGE}" if web and web_searches == 0 else _NUDGE
+            messages.append({"role": "user", "content": nudge})
             continue
 
         results: list[dict] = []
         for block in uses:
-            if block.get("name") == "finish_phase":
-                continue
+            name = block.get("name")
             result: dict = {"type": "tool_result", "tool_use_id": block.get("id")}
-            if calls >= budget:
+            if name == "finish_phase":
+                if web and web_searches == 0 and block is finish:
+                    result.update(content=_SEARCH_REMINDER, is_error=True)
+                    results.append(result)
+                    finish = None
+                continue
+            if run_tool is None:
+                result.update(content=f"Unknown tool: {name}", is_error=True)
+            elif calls >= budget:
                 result.update(content=_EXHAUSTED, is_error=True)
             else:
                 calls += 1
-                name, tool_input = block.get("name"), block.get("input")
+                tool_input = block.get("input")
                 try:
                     output = await asyncio.to_thread(run_tool, name, tool_input)
                     result["content"] = output
@@ -134,7 +217,7 @@ async def run_phase(
             for item in finished(finish, nudged_last):
                 yield item
             return
-        if calls >= budget:
+        if budget_reached():
             noticed = True
             results.append({"type": "text", "text": _BUDGET_NOTICE})
         nudged_last = False

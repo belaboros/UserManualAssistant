@@ -1,7 +1,9 @@
-from uma.llm import FakeLLM, LLMError, Usage, finish_phase_response, text_response, tool_use_response
+from uma.llm import (FakeLLM, LLMError, Usage, finish_phase_response, pause_turn_response, text_response,
+                     tool_use_response, web_search_blocks)
 from uma.strategies.base import Failed
 from uma.strategies.manual_tools import MANUAL_TOOLS, ToolError
-from uma.strategies.phase import FINISH_PHASE_TOOL, PhaseResult, run_phase
+from uma.strategies.phase import FINISH_PHASE_TOOL, PhaseResult, run_phase, web_search_tool
+from uma.strategies.web_sources import WebSources
 
 SEARCH = {"query": "pair hub", "manual_id": None}
 NOTICE = "Tool budget reached. Call finish_phase now with what you have."
@@ -148,3 +150,171 @@ async def test_refusal_and_llm_error_fail():
             yield
 
     assert await _run(Silent()) == [Failed("The model returned no response")]
+
+
+# --- web phase ---------------------------------------------------------------
+
+REMINDER = "Search the web at least once before finishing."
+A = ("https://a.example/x", "A")
+
+
+async def _run_web(llm, budget=8, sources=None):
+    return [e async for e in run_phase(llm, phase="web", system="sys", prompt="check", tools=[],
+                                       run_tool=None, budget=budget,
+                                       sources=WebSources() if sources is None else sources)]
+
+
+def _search_turn(query="q", results=(A,), **kw):
+    from uma.llm import LLMResponse
+    return LLMResponse(web_search_blocks(query, list(results) if results is not None else None, **kw),
+                       "end_turn", Usage(10, 5))
+
+
+def _web_tool(call):
+    return next(t for t in call["tools"] if t.get("name") == "web_search")
+
+
+def test_web_search_tool_shape():
+    assert web_search_tool(3) == {"type": "web_search_20260209", "name": "web_search", "max_uses": 3}
+
+
+def test_web_search_blocks_shape():
+    use, res = web_search_blocks("q", [A], id="srvtoolu_1")
+    assert use == {"type": "server_tool_use", "id": "srvtoolu_1", "name": "web_search", "input": {"query": "q"}}
+    assert res == {"type": "web_search_tool_result", "tool_use_id": "srvtoolu_1",
+                   "content": [{"type": "web_search_result", "url": A[0], "title": "A"}]}
+    _, err = web_search_blocks("q", None, error_code="unavailable")
+    assert err["content"] == {"type": "web_search_tool_result_error", "error_code": "unavailable"}
+    assert pause_turn_response([use]).stop_reason == "pause_turn"
+
+
+async def test_web_search_counted_traced_and_sourced():
+    sources = WebSources()
+    blocks = web_search_blocks("q", [A])
+    llm = FakeLLM([finish_phase_response(True, [], "Y [web:https://a.example/x] Z [web:https://b.example/]",
+                                         extra=blocks)])
+    events = await _run_web(llm, sources=sources)
+    result = events[-1]
+    assert result.web_searches == 1 and result.notes == "Y [web:1] Z " and result.tool_calls == 0
+    assert result.forced is False and result.sufficient is True
+    assert [e.kind for e in events[:-1]] == ["web_search", "planner"]
+    assert events[0].detail == {"phase": "web", "query": "q", "result_count": 1}
+    assert _web_tool(llm.calls[0]) == web_search_tool(8)
+    assert llm.calls[0]["tools"][-1] == FINISH_PHASE_TOOL
+    assert len(sources) == 1
+
+
+async def test_duplicate_urls_one_source():
+    sources = WebSources()
+    llm = FakeLLM([_search_turn("q1"), finish_phase_response(True, [], "n", extra=web_search_blocks("q2", [A]))])
+    events = await _run_web(llm, sources=sources)
+    assert len(sources) == 1 and events[-1].web_searches == 2
+
+
+async def test_finish_without_search_is_rejected():
+    llm = FakeLLM([finish_phase_response(True, [], "early"),
+                   finish_phase_response(True, [], "late", extra=web_search_blocks("q", [A]))])
+    events = await _run_web(llm)
+    rejected = _last_user(llm.calls[1])
+    assert rejected == [{"type": "tool_result", "tool_use_id": llm.responses[0].content[0]["id"],
+                         "content": REMINDER, "is_error": True}]
+    result = events[-1]
+    assert result.notes == "late" and result.forced is False and result.web_searches == 1
+
+
+async def test_web_nudge_starts_with_reminder_until_searched():
+    llm = FakeLLM([text_response("a"), text_response("b")])
+    events = await _run_web(llm)
+    assert _last_user(llm.calls[1]) == f"{REMINDER} {NUDGE}"
+    assert events[-1].gaps == ["did not call finish_phase"] and events[-1].notes == "b"
+
+    llm = FakeLLM([_search_turn(), finish_phase_response(True, [], "n")])
+    await _run_web(llm)
+    assert _last_user(llm.calls[1]) == NUDGE
+
+
+async def test_unknown_client_tool_is_error():
+    llm = FakeLLM([tool_use_response("search", SEARCH),
+                   finish_phase_response(True, [], "n", extra=web_search_blocks("q", [A]))])
+    events = await _run_web(llm)
+    result = _last_user(llm.calls[1])[0]
+    assert result["is_error"] is True and result["content"] == "Unknown tool: search"
+    assert events[-1].tool_calls == 0 and events[-1].notes == "n"
+
+
+async def test_pause_turn_resumed_without_user_message():
+    llm = FakeLLM([pause_turn_response(web_search_blocks("q", [A])), finish_phase_response(True, [], "n")])
+    events = await _run_web(llm)
+    second = llm.calls[1]["messages"]
+    assert second[-1]["role"] == "assistant" and second[-1]["content"] == llm.responses[0].content
+    assert len(second) == 2
+    assert events[-1].web_searches == 1 and events[-1].forced is False
+
+
+async def test_pause_split_pairs_search_across_responses():
+    use, res = web_search_blocks("q", [A])
+    llm = FakeLLM([pause_turn_response([use]), pause_turn_response([res]), finish_phase_response(True, [], "n")])
+    events = await _run_web(llm)
+    assert events[0].kind == "web_search" and events[0].detail == {"phase": "web", "query": "q", "result_count": 1}
+
+
+async def test_six_pauses_force_close():
+    first = pause_turn_response([*web_search_blocks("q", [A]), {"type": "text", "text": "p0 [web:https://a.example/x]"}])
+    rest = [pause_turn_response([{"type": "text", "text": f" p{i}"}]) for i in range(1, 6)]
+    llm = FakeLLM([first, *rest, text_response("never")])
+    events = await _run_web(llm)
+    assert len(llm.calls) == 6
+    assert all(c["messages"][-1]["role"] == "assistant" for c in llm.calls[1:])
+    result = events[-1]
+    assert result.forced is True and result.sufficient is False
+    assert result.gaps == ["web search paused too often"]
+    assert result.notes == "p0 [web:1] p1 p2 p3 p4 p5"
+    assert events[-2].kind == "planner" and events[-2].detail["forced"] is True
+
+
+async def test_all_searches_error():
+    llm = FakeLLM([finish_phase_response(True, [], "n [web:https://a.example/x]",
+                                         extra=web_search_blocks("q", None, error_code="unavailable"))])
+    events = await _run_web(llm)
+    assert events[0].detail == {"phase": "web", "query": "q", "error_code": "unavailable"}
+    result = events[-1]
+    assert result.notes == "Web search was unavailable." and result.sufficient is False
+    assert result.web_searches == 1
+    assert events[-2].detail["sufficient"] is False
+
+
+async def test_one_failed_search_among_successes_keeps_notes():
+    llm = FakeLLM([_search_turn("bad", None, error_code="unavailable"),
+                   finish_phase_response(True, [], "n [web:https://a.example/x]", extra=web_search_blocks("q", [A]))])
+    events = await _run_web(llm)
+    assert events[-1].notes == "n [web:1]" and events[-1].sufficient is True
+
+
+async def test_max_uses_tracks_remaining_budget():
+    # The first turn pauses so the search-only turns do not trip the plain-text nudge.
+    llm = FakeLLM([pause_turn_response(web_search_blocks("q1", [A])), _search_turn("q2"),
+                   finish_phase_response(True, [], "done")])
+    events = await _run_web(llm, budget=2)
+    assert _web_tool(llm.calls[0])["max_uses"] == 2
+    assert _web_tool(llm.calls[1])["max_uses"] == 1
+    assert _web_tool(llm.calls[2])["max_uses"] == 1
+    assert _last_user(llm.calls[2]) == NOTICE
+    result = events[-1]
+    assert result.forced is True and result.notes == "done" and result.web_searches == 2
+
+
+async def test_budget_reached_while_paused_resumes_without_notice():
+    llm = FakeLLM([pause_turn_response(web_search_blocks("q", [A])), _search_turn("q2"), text_response("t")])
+    events = await _run_web(llm, budget=1)
+    assert llm.calls[1]["messages"][-1]["role"] == "assistant"
+    assert _last_user(llm.calls[2]) == NOTICE
+    result = events[-1]
+    assert result.forced is True and result.gaps == ["budget exhausted"] and result.notes == "t"
+
+
+async def test_request_cap_closes_phase():
+    llm = FakeLLM([tool_use_response("bogus", {}) for _ in range(20)])
+    events = await _run_web(llm, budget=1)
+    assert len(llm.calls) == 1 + 5 + 4
+    result = events[-1]
+    assert result.forced is True and result.gaps == ["budget exhausted"] and result.sufficient is False

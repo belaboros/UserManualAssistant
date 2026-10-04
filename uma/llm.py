@@ -202,3 +202,26 @@ def finish_phase_response(
     """A `tool_use` turn calling finish_phase; `extra` blocks come before it."""
     block = tool_use_response("finish_phase", {"sufficient": sufficient, "gaps": gaps, "notes": notes}).content[0]
     return LLMResponse([*(extra or []), block], "tool_use", Usage(10, 5))
+
+
+def web_search_blocks(
+    query: str, results: list[tuple[str, str]] | None, *, error_code: str | None = None, id: str | None = None
+) -> list[dict]:
+    """A server-side web search: its `server_tool_use` block and the matching `web_search_tool_result`.
+
+    `results` are (url, title) pairs; pass `error_code` (with `results=None`) for a failed search.
+    """
+    block_id = id or f"srvtoolu_{uuid.uuid4().hex[:16]}"
+    if error_code is not None:
+        content: list[dict] | dict = {"type": "web_search_tool_result_error", "error_code": error_code}
+    else:
+        content = [{"type": "web_search_result", "url": url, "title": title} for url, title in results or []]
+    return [
+        {"type": "server_tool_use", "id": block_id, "name": "web_search", "input": {"query": query}},
+        {"type": "web_search_tool_result", "tool_use_id": block_id, "content": content},
+    ]
+
+
+def pause_turn_response(blocks: list[dict]) -> LLMResponse:
+    """A turn the API paused mid-way (long-running server tools); resumed by calling again."""
+    return LLMResponse(list(blocks), "pause_turn", Usage(10, 5))
