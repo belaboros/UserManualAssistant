@@ -105,3 +105,11 @@ async def test_runner_survives_save_failure(tmp_path, monkeypatch, caplog):
         events = [e async for e in run_question(qid, "q", [ScriptedStrategy("a")], log, timeout_s=5)]
     assert events[-1] == {"type": "done"}
     assert any(r.levelname == "ERROR" and "save answer" in r.getMessage() for r in caplog.records)
+
+
+async def test_runner_uses_strategy_timeout(tmp_path):
+    log, qid = setup(tmp_path)
+    s = ScriptedStrategy("slow", delay=1)
+    s.timeout_s = 0.05
+    events = [e async for e in run_question(qid, "q", [s], log, timeout_s=10)]
+    assert events[-2]["message"] == "Timed out after 0.05 s"

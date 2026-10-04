@@ -24,6 +24,7 @@ async def _run_one(
     async def emit(payload: dict) -> None:
         await queue.put({"strategy": strategy.id, **payload})
 
+    timeout_s = getattr(strategy, "timeout_s", None) or timeout_s
     cm = asyncio.timeout(timeout_s)
     try:
         try:
