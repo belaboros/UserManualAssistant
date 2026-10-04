@@ -117,6 +117,10 @@
   function layoutColumns(blind) {
     const ids = state.strategies.map((s) => s.id).filter((id) => columns[id]);
     const order = blind ? shuffle(ids) : ids;
+    // Blind mode keeps the maximized SLOT (screen position), not the strategy: following the
+    // id across a reshuffle would tell the viewer which strategy is now in the wide column.
+    const maxCol = columns[columnsEl.dataset.maximized];
+    const slot = maxCol ? Array.prototype.indexOf.call(columnsEl.children, maxCol) : -1;
     order.forEach((id, i) => {
       const col = columns[id];
       columnsEl.append(col); // moves the node into its new position
@@ -127,6 +131,7 @@
       show($(".how-it-works", col), !hidden);
       col.classList.toggle("blind-hidden", hidden);
     });
+    if (blind && slot >= 0) setMaximized(columnsEl.children[slot].dataset.strategy);
   }
 
   function reveal(id) {
@@ -154,6 +159,9 @@
     else delete columnsEl.dataset.maximized;
     for (const [cid, col] of Object.entries(columns)) {
       const on = cid === target;
+      const title = $(".column-title", col);
+      if (on) title.title = "Click to restore equal widths";
+      else title.removeAttribute("title");
       col.classList.toggle("is-maximized", on);
       col.classList.toggle("is-collapsed", !!target && !on);
       const btn = $(".maximize", col);
@@ -161,6 +169,13 @@
       btn.setAttribute("aria-label", on ? "Restore equal widths" : "Maximize this column");
       btn.textContent = on ? "\u2921" : "\u2922"; // ⤡ restore, ⤢ maximize
     }
+  }
+
+  // Below 700px the columns stack; drop the state so no button shows a pressed "Restore".
+  if (wideQuery) {
+    const onWidth = () => { if (!wideQuery.matches) setMaximized(null); };
+    if (wideQuery.addEventListener) wideQuery.addEventListener("change", onWidth);
+    else if (wideQuery.addListener) wideQuery.addListener(onWidth);
   }
 
   function toggleMaximize(col) {
@@ -415,7 +430,12 @@
     state.panelSeq++;
     const opener = panelOpener;
     panelOpener = null;
-    if (restoreFocus === true && opener && opener.isConnected) opener.focus();
+    if (restoreFocus === true && opener && opener.isConnected) {
+      // The opener may sit in a column collapsed to a strip since: focus its strip button.
+      const col = opener.closest(".column");
+      if (opener.getClientRects().length === 0 && col) $(".maximize", col).focus();
+      else opener.focus();
+    }
   }
 
   async function openSection(sectionId, opener) {

@@ -42,8 +42,12 @@ def test_columns_have_maximize_toggle(tmp_path):
         assert len(buttons) == 1, sec[:80]
         assert 'aria-label="' in buttons[0], buttons[0]
         assert 'aria-pressed="false"' in buttons[0], buttons[0]
+        sid = re.search(r'data-strategy="([a-z_]+)"', sec).group(1)
+        assert f'id="badge-{sid}"' in sec, sid
+        assert f'aria-describedby="title-{sid} badge-{sid}"' in buttons[0], buttons[0]
     js = client.get("/static/app.js").text
     assert "dataset.maximized" in js
+    assert "matchMedia" in js  # maximized state is cleared below 700px
     css = client.get("/static/style.css").text
     assert "data-maximized" in css
 
