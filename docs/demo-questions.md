@@ -37,7 +37,7 @@ the whole of it:
 | Strategy | Expected behaviour |
 |----------|-------------------|
 | Whole-context | One ordered list in the right order (hub, then thermostat, then app), with citations into all three manuals. |
-| RAG | Usually good, because the coverage rule tops up any missing manual. Check the retrieval trace: if one of the three sections is missing, the answer will have a gap there. |
+| RAG | Usually good, because the coverage rule adds the best chunk of any manual missing from the top 8, provided it scores at least 50 percent of the top chunk's score. Check the retrieval trace: if one of the three sections is missing, the answer will have a gap there. |
 | Agentic | Good when it follows the cross-references ("as described in the hub guide"). If it stops after the thermostat section, the Link-button step goes missing. |
 
 **What it teaches:** cross-document synthesis. Whole-context gets this for free; RAG needs the
@@ -96,12 +96,17 @@ thermostat is defective.
 | Strategy | Expected behaviour |
 |----------|-------------------|
 | Whole-context | Correct, but it sends the whole corpus to answer from one paragraph. |
-| RAG | Correct and the cheapest: "E3" is an exact keyword, so BM25 ranks the E3 section at or near the top. One small call. |
+| RAG | Correct: "E3" is an exact keyword, so BM25 ranks the E3 section at or near the top. One small call. On the sample corpus it is *not* necessarily the cheapest: if whole-context's cache is warm, whole-context may cost the same or less (see below). |
 | Agentic | Correct, but it typically uses two to four tool calls (search, read, maybe list manuals first) where one would do: the over-research failure. |
 
-**What it teaches:** for simple lookups, RAG is the right tool. On the tiny sample corpus the cost
-gap to a *cached* whole-context call is small; it grows with the corpus, because RAG's prompt stays
-the same size and whole-context's doesn't. Compare the cost in the footers.
+**What it teaches:** for simple lookups on a realistic corpus, RAG is the right tool. On the tiny
+sample corpus (about 5,500 tokens), a *warm* whole-context call reads its cached prefix at a tenth
+of the input price and can cost as much as or less than RAG. That is itself a lesson: caching
+makes "send everything" cheap while the corpus is small and the cache is warm. The balance tips
+towards RAG once the corpus passes roughly ten times the RAG prompt (a few tens of thousands of
+tokens), or whenever the cache is cold; see the break-even in the
+[whole-context explainer](strategies/1-whole-context.md#cost-and-latency). Compare the cost in the
+footers, and ask the question once right after start-up (cold cache) and once a minute later.
 
 ## 5. "Give me a complete first-day setup checklist"
 

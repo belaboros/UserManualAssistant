@@ -21,7 +21,7 @@ Ratings: **good** means the strategy handles this well, **fair** means it works 
 | **Cross-document need** | **Good.** Sees every manual at once and can merge steps from all of them. | **Fair.** Limited to top 8 chunks plus one coverage chunk per missing manual. | **Good.** Can follow references from one manual to another, within its 8-call budget. |
 | **Honesty need** (trustworthy "not covered") | **Good.** "Not covered" is a judgement over the whole corpus. | **Poor.** "Not retrieved" looks the same as "not there". | **Fair.** It searches before giving up, but it can stop too early. |
 | **Latency budget** | **Fair.** Fast on cache hits; slow on cold calls over a large corpus. | **Good.** One local search and one small model call. | **Poor.** One model call per turn, run one after another. |
-| **Cost budget** | **Fair.** Cheap when cached and small; about $1.25 per cold call at 500,000 tokens. | **Good.** Lowest and most predictable at any scale. | **Poor.** Varies with the number of turns; the budget caps only the worst case. |
+| **Cost budget** | **Fair.** Cheap when cached and small; about $1.25 per cold call at 500,000 tokens. | **Good.** Small and predictable at any scale; the cheapest once the corpus passes a few tens of thousands of tokens or the whole-context cache is cold. | **Poor.** Varies with the number of turns; the budget caps only the worst case. |
 | **Transparency** (can you see why it answered that way?) | **Fair.** Citations show what it used, but not what it skipped. | **Good.** The retrieval trace shows exactly what the model was given. | **Good.** The trace shows every search and every section read, in order. |
 
 All three use the same model, effort and answering rules

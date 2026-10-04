@@ -99,7 +99,8 @@ sequenceDiagram
    stops with a `Failed` event whose hint links to the [Avoid when](#avoid-when) section below.
 4. **Write the system prompt.** The shared [`ANSWERING_RULES`](../../uma/strategies/rules.py)
    (the same for all three strategies, see [ADR 0006](../adr/0006-same-model-and-rules-for-all-strategies.md))
-   plus one line describing the mechanism: "The complete manuals are provided as documents."
+   plus one line describing the mechanism: "The complete manuals are provided as documents. Read
+   them in full before answering."
 5. **Call Claude once, streaming.** [`run_single_call`](../../uma/strategies/base.py) sends the
    documents followed by the question ([`AnthropicLLM.stream`](../../uma/llm.py)). Text streams to
    the browser as it arrives. The [`StatusTagFilter`](../../uma/strategies/base.py) holds back the
@@ -135,7 +136,9 @@ sequenceDiagram
   prefix, so the next call is a cache miss that re-bills every token at the cache-write price. The
   cache also expires after about 5 minutes without a hit, so bursty traffic pays for many writes.
 - **Latency or cost per question must be minimal.** Even a cache read still sends the whole corpus
-  through the model; a RAG prompt of a few thousand tokens is always cheaper and usually faster.
+  through the model. Once the corpus is more than a few tens of thousands of tokens, or whenever the
+  cache is cold, a RAG prompt of a few thousand tokens is cheaper and usually faster (see the
+  break-even below).
 - **Only a tiny slice is ever relevant.** If every question is a lookup such as "what does E3
   mean?", paying to send hundreds of pages to answer from one paragraph is waste.
 
@@ -163,6 +166,21 @@ thinking, which is billed as output.
 **The same arithmetic for a 500,000-token corpus** shows why caching and corpus size dominate:
 the first call costs about 500,000 × $2.50/MTok = $1.25 for input alone, and a cached call about
 $0.10. Without caching, every question would cost about $1.00 of input.
+
+**Break-even with RAG.** A cache read costs a tenth of the normal input price ($0.20 versus $2.00
+per MTok), so a *warm* whole-context call has cheaper input than a RAG call until the corpus is
+about ten times the size of the RAG prompt. RAG sends roughly 8 chunks of up to 400 tokens plus
+overhead, about 3,750 tokens on real manuals:
+
+- RAG input: 3,750 × $2.00/MTok ≈ $0.0075 (≈ $0.0094 if billed at the $2.50 cache-write rate, see
+  the [RAG explainer](2-rag.md#cost-and-latency));
+- warm whole-context input for a corpus of C tokens: C × $0.20/MTok;
+- equal when C ≈ 3,750 × 10 ≈ 37,500 tokens (≈ 47,000 at the cache-write rate).
+
+Below that size, a warm whole-context call can cost the same as or less than RAG. On the sample
+corpus (≈ 5,500 tokens) the warm input is about $0.0011, cheaper than RAG's input. Above it, or
+whenever the cache is cold (first question, after re-ingesting, after 5 idle minutes), RAG is
+cheaper, and the gap widens with every extra token in the corpus.
 
 Latency follows the same shape: the model has to process every input token before it writes the
 first word. On the sample corpus that's barely noticeable; on hundreds of thousands of tokens a

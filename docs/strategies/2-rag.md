@@ -105,7 +105,9 @@ sequenceDiagram
    [`TraceStep`](../../uma/strategies/base.py) listing each chunk's section, manual, heading path and
    score. The browser shows it in the trace list.
 8. **Call Claude once, streaming.** Each chunk becomes a `document` block titled
-   `manual › heading path`, with citations enabled. The system prompt is the shared
+   `{manual title} — {heading path joined with " › "}`, for example
+   `Nimbus Thermostat User Manual — Thermostat settings and troubleshooting › Factory reset`,
+   with citations enabled. The system prompt is the shared
    [`ANSWERING_RULES`](../../uma/strategies/rules.py) plus "Excerpts retrieved for this question are
    provided as documents." [`run_single_call`](../../uma/strategies/base.py) streams the answer and
    [`StatusTagFilter`](../../uma/strategies/base.py) hides the status tag.
@@ -134,8 +136,9 @@ sequenceDiagram
   there". If the search misses the relevant chunk, RAG will honestly report `not_covered`, and be
   wrong.
 - **The user's vocabulary differs from the manuals' and the embeddings are weak.** Keyword search
-  can't bridge synonyms, and a small embedding model bridges only some of them. A user asking about
-  "the little hole on the back" may never reach the "reset pin" section.
+  can't bridge synonyms, and a small embedding model bridges only some of them. A user who asks how to
+  "wipe memory clean" shares no keyword with the "Factory reset" section (or with anything else in
+  the sample manuals), so BM25 returns nothing and only the embeddings can connect the two.
 
 ## Cost and latency
 
@@ -153,22 +156,26 @@ characters / 49 / 4). Eight chunks plus coverage additions, document titles, the
 the question come to about 1,500 input tokens. Assume about 600 output tokens, including adaptive
 thinking, which is billed as output.
 
+Every request from [`uma/llm.py`](../../uma/llm.py) carries a request-level cache marker
+(`cache_control`), so a prompt that is long enough to be cached is billed at the **cache-write
+rate, $2.50 per MTok**, even though the next question will usually retrieve different chunks and
+never read that cache entry back. The table assumes that worst case; at the plain input rate the
+input line would be $0.0030.
+
 | Part | Tokens | Cost |
 |------|-------:|-----:|
-| Input | 1,500 × $2/MTok | $0.0030 |
+| Input (cache-write rate) | 1,500 × $2.50/MTok | $0.0038 |
 | Output | 600 × $10/MTok | $0.0060 |
-| **Total** | | **≈ $0.009** |
+| **Total** | | **≈ $0.010** |
 
-On this tiny corpus that's about the same as a *cached* whole-context call. The difference
-appears as the corpus grows: with real manuals, chunks are closer to the full 400 tokens, so the
-prompt is about 8 × 400 + overhead ≈ 3,500–4,000 input tokens (≈ $0.008 of input) **no matter
-whether the corpus is 5,000 or 500,000 tokens**, where a whole-context call on 500,000 tokens costs
-$0.10 cached and $1.25 cold.
-
-The retrieval prompt is different for each question, so the prompt cache rarely helps. The request
-in [`uma/llm.py`](../../uma/llm.py) still carries a request-level cache marker, so a long-enough
-prompt may be billed at the cache-write rate ($2.50 instead of $2.00 per MTok). It's a small
-surcharge on a small prompt, and the cost in the footer includes it.
+On this tiny corpus that's slightly *more* than a warm (cached) whole-context call, about $0.009:
+reading 5,500 cached tokens at $0.20 per MTok costs less than writing 1,500 at $2.50. RAG wins on
+cost once the corpus is more than about ten times the RAG prompt (a few tens of thousands of
+tokens), or whenever whole-context's cache is cold; the
+[whole-context explainer](1-whole-context.md#cost-and-latency) works out the break-even. With real
+manuals, chunks are closer to the full 400 tokens, so the prompt is about 8 × 400 + overhead ≈
+3,500–4,000 input tokens (≈ $0.008–0.010 of input) **no matter whether the corpus is 5,000 or
+500,000 tokens**, where a whole-context call on 500,000 tokens costs $0.10 cached and $1.25 cold.
 
 Latency: hybrid search runs locally in milliseconds (embedding one question on the CPU is the
 slowest part), then one short model call. RAG is usually the first column to start streaming.
@@ -204,7 +211,8 @@ manuals that were actually *cited*, not all that were retrieved.
   every chunk sent to Claude, with scores. Ask yourself whether the right section is in the list.
   If it isn't, no prompt engineering could have saved the answer.
 - **The cheap lookup.** For "What does error E3 mean?" expect the E3 section near the top of the
-  trace and the lowest cost and latency of the three columns once the corpus is realistic.
+  trace. On a realistic corpus RAG should have the lowest cost and latency of the three columns; on
+the small sample corpus a warm whole-context call can be just as cheap.
 - **Cross-manual pairing.** For "How do I pair the thermostat with the hub?" check whether all three
   manuals' pairing sections appear in the trace. The coverage rule is there to make that likely.
 - **Honest gaps that might not be.** For the Alexa question, RAG should say `not_covered`, and here
