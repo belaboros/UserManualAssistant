@@ -14,3 +14,73 @@ AI assistant on a small set of user manuals that
 
 Summary<br>
 Users want quick and efficient solutions to their problem, rather than reading long manuals, waiting long for a personal consultation or reporting bugs manually in a ticketing system, ... 
+
+
+## v1: retrieval strategy comparison
+
+The first version is a side-by-side lab for one question: *how should an assistant find the right passage in a set of user manuals?* You ask a question once and three retrieval strategies answer it in parallel, each streaming into its own column, all using the same Claude model and the same answering rules:
+
+* **Whole-context** puts every manual into the prompt.
+* **RAG** retrieves the most relevant chunks with local embeddings and full-text search, then answers from them.
+* **Agentic** lets Claude search and read the manuals with tools until it is satisfied.
+
+Each column shows the answer, its citations, a trace of the steps taken, and the time, token and cost figures. You can judge the answers yourself: vote for the best one, optionally in **blind mode**, which hides which strategy produced which column until you have voted. The **leaderboard** page (`/leaderboard`) aggregates the votes, with filtering, export and reset.
+
+What you can learn from it: where each strategy is accurate, fast and cheap, where it misses content or gets expensive, and how each one handles questions the manuals do not cover or answer inconsistently. The sample corpus contains a deliberate contradiction (the thermostat factory-reset hold time) so you can see which strategies notice it.
+
+The only data stored is local, in `data/uma.db` (the ingested corpus, the question log and your votes). Nothing is sent anywhere except the prompts to the Anthropic API.
+
+## Quickstart
+
+Requires [uv](https://docs.astral.sh/uv/) and an Anthropic API key.
+
+```bash
+uv sync
+cp .env.example .env          # then set ANTHROPIC_API_KEY in .env
+uv run python -m uma ingest --sample
+uv run python -m uma serve
+```
+
+Then open http://127.0.0.1:8000. The first `ingest` downloads a small local embedding model (about 130 MB). Use `uv run python -m uma serve --host HOST --port PORT` to change the address.
+
+## Using your own manuals
+
+Put each manual in its own folder under `manuals/` (git-ignored, so your documents stay out of the repository) and describe it with a `manual.yaml`:
+
+```
+manuals/
+  my-router/
+    manual.yaml
+    setup.md
+    troubleshooting.html
+```
+
+```yaml
+title: My Router            # required
+id: my-router               # optional, defaults to the folder name
+owner: Support team         # optional
+visibility: internal        # optional: internal (default) or external
+base_url: https://example.com/docs/my-router/   # optional, used to build links to sections
+```
+
+Supported file types are `.md`, `.markdown`, `.html` and `.htm`, found recursively inside the folder. Folders without a `manual.yaml` are skipped. Then run:
+
+```bash
+uv run python -m uma ingest                          # reads manuals/ (or UMA_MANUALS_DIR)
+uv run python -m uma ingest --manuals-dir PATH       # reads another directory
+```
+
+## Learn how it works
+
+* [Architecture overview](docs/architecture/overview.md)
+* The three strategy explainers: [whole-context](docs/strategies/1-whole-context.md), [RAG](docs/strategies/2-rag.md), [agentic](docs/strategies/3-agentic.md)
+* [Choosing a strategy](docs/choosing-a-strategy.md)
+* [Demo questions](docs/demo-questions.md) to try in the app
+* [Architecture decision records](docs/adr/README.md)
+
+## Running tests
+
+```bash
+uv run pytest             # offline unit and integration tests
+uv run pytest -m live     # smoke test against the real Claude API (a few cents; needs credentials)
+```
