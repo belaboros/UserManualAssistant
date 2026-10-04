@@ -132,3 +132,22 @@ async def test_llm_error_fails(sample_store, embedder):
 
     events = await _run(sample_store, embedder, Boom())
     assert events == [Failed("boom")]
+
+
+async def test_max_tokens_stop_is_failed(sample_store, embedder):
+    from uma.llm import LLMResponse, Usage
+    llm = FakeLLM([tool_use_response("list_manuals", {}),
+                   LLMResponse([{"type": "text", "text": "Hold the"}], "max_tokens", Usage(10, 5))])
+    events = await _run(sample_store, embedder, llm)
+    assert isinstance(events[-1], Failed)
+    assert events[-1].message == "The answer was cut off (max_tokens reached)."
+    assert not any(isinstance(e, Final) for e in events)
+
+
+async def test_missing_status_tag_logs_warning(sample_store, embedder, caplog):
+    import logging
+    with caplog.at_level(logging.WARNING, logger="uma.strategies.agentic"):
+        events = await _run(sample_store, embedder, FakeLLM([text_response("No tag.")]))
+    assert events[-1].answer.status == "answered"
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 1 and "agentic" in warnings[0].getMessage()

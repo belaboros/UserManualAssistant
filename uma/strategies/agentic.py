@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from collections.abc import AsyncIterator
 
@@ -18,12 +19,16 @@ from uma.strategies.base import (
     Final,
     Metrics,
     StatusTagFilter,
+    TRUNCATED,
     TextDelta,
     TraceStep,
     resolve_section_markers,
     strip_status,
+    warn_missing_status,
 )
 from uma.strategies.rules import AGENTIC_ADDENDUM, ANSWERING_RULES
+
+logger = logging.getLogger(__name__)
 
 TOOLS: list[dict] = [
     {
@@ -153,9 +158,14 @@ class AgenticStrategy:
             if response.stop_reason == "refusal":
                 yield Failed("The model declined this question")
                 return
+            if response.stop_reason == "max_tokens":
+                yield Failed(TRUNCATED)
+                return
             if response.stop_reason != "tool_use":
                 raw = "".join(b.get("text", "") for b in response.content if b.get("type") == "text")
-                text, status, _ = strip_status(raw)
+                text, status, found = strip_status(raw)
+                if not found:
+                    warn_missing_status(self.id, logger)
                 text, citations = resolve_section_markers(text, self._lookup)
                 metrics = Metrics(
                     latency_ms=round((time.perf_counter() - started) * 1000),

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import re
 import time
 from collections.abc import AsyncIterator, Callable
@@ -10,6 +11,10 @@ from typing import Literal, Protocol
 
 from uma.config import cost_usd
 from uma.llm import LLM, Completed, LLMError, TextChunk, Usage
+
+logger = logging.getLogger(__name__)
+
+TRUNCATED = "The answer was cut off (max_tokens reached)."
 
 Status = Literal["answered", "not_covered", "contradiction_found"]
 _STATUSES: tuple[str, ...] = ("answered", "not_covered", "contradiction_found")
@@ -133,6 +138,12 @@ class StatusTagFilter:
         return rest, self._status, self._found
 
 
+def warn_missing_status(strategy_id: str | None, log: logging.Logger | None = None) -> None:
+    """Spec 5.3 / ADR 0009: a missing or malformed status tag yields answered plus a warning."""
+    (log or logger).warning("Strategy %s: missing or malformed status tag; defaulting to answered",
+                   strategy_id or "?")
+
+
 def strip_status(text: str) -> tuple[str, Status, bool]:
     f = StatusTagFilter()
     shown = f.feed(text)
@@ -196,6 +207,7 @@ async def run_single_call(
     resolve: Callable[[dict], Citation | None],
     started: float,
     model: str,
+    strategy_id: str | None = None,
 ) -> AsyncIterator[AnswerEvent]:
     """One streamed LLM call -> TextDelta* then Final (or Failed).
 
@@ -203,7 +215,8 @@ async def run_single_call(
     `model` selects the price for Metrics.cost_usd; `resolve` maps a raw citation
     dict to a Citation, or None if it cannot (see assemble_cited_text).
     The status tag is hidden from streamed text and parsed from the assembled text.
-    LLMError is converted to Failed(str(e)); stop_reason "refusal" to Failed.
+    LLMError is converted to Failed(str(e)); stop_reason "refusal" or "max_tokens" to Failed.
+    `strategy_id` only labels the warning logged for a missing status tag.
     """
     filt = StatusTagFilter()
     try:
@@ -217,8 +230,13 @@ async def run_single_call(
                 if response.stop_reason == "refusal":
                     yield Failed("The model declined this question")
                     return
+                if response.stop_reason == "max_tokens":
+                    yield Failed(TRUNCATED)
+                    return
                 raw, citations = assemble_cited_text(response.content, resolve)
-                text, status, _ = strip_status(raw)
+                text, status, found = strip_status(raw)
+                if not found:
+                    warn_missing_status(strategy_id)
                 rest, _, _ = filt.finish()
                 if rest:
                     yield TextDelta(rest)

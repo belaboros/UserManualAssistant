@@ -116,3 +116,40 @@ def test_chunking_never_changes_output():
             for j in range(i, len(text) + 1):
                 assert run([text[:i], text[i:j], text[j:]]) == expected, (text, i, j)
         assert strip_status(text) == expected
+
+
+# --- run_single_call -------------------------------------------------------------------
+
+import logging  # noqa: E402
+import time  # noqa: E402
+
+from uma.llm import FakeLLM, LLMResponse, text_response  # noqa: E402
+from uma.strategies.base import Failed, Final, run_single_call  # noqa: E402
+
+
+async def _single(llm, **kw):
+    return [e async for e in run_single_call(
+        llm, "sys", [{"role": "user", "content": "q"}], lambda c: None, time.perf_counter(),
+        "claude-sonnet-5-5", **kw)]
+
+
+async def test_run_single_call_max_tokens_is_failed():
+    llm = FakeLLM([LLMResponse([{"type": "text", "text": "Hold the"}], "max_tokens", Usage(10, 5))])
+    events = await _single(llm)
+    assert isinstance(events[-1], Failed)
+    assert events[-1].message == "The answer was cut off (max_tokens reached)."
+    assert not any(isinstance(e, Final) for e in events)
+
+
+async def test_run_single_call_missing_tag_logs_warning(caplog):
+    with caplog.at_level(logging.WARNING, logger="uma.strategies.base"):
+        events = await _single(FakeLLM([text_response("No tag here.")]), strategy_id="rag")
+    assert events[-1].answer.status == "answered"
+    warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+    assert len(warnings) == 1 and "rag" in warnings[0].getMessage()
+
+
+async def test_run_single_call_valid_tag_logs_nothing(caplog):
+    with caplog.at_level(logging.WARNING, logger="uma.strategies.base"):
+        await _single(FakeLLM([text_response("Ok.\n<status>not_covered</status>")]))
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]

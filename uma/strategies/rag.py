@@ -64,6 +64,6 @@ class RagStrategy:
         system = f"{ANSWERING_RULES}\n{MECHANISM}"
         messages = [{"role": "user", "content": [*docs, {"type": "text", "text": question}]}]
         async for event in run_single_call(
-            self.llm, system, messages, resolve, started, self.settings.model
+            self.llm, system, messages, resolve, started, self.settings.model, self.id
         ):
             yield event
