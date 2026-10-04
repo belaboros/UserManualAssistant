@@ -85,3 +85,18 @@ async def test_unresolvable_citation_is_dropped(sample_store):
     llm = FakeLLM([text_response("Hi.", citations=[bad, oob])], token_count=40_000)
     events = await _run(sample_store, llm)
     assert events[-1].answer.citations == [] and events[-1].answer.text == "Hi."
+
+
+async def test_whole_context_uses_shared_rules(sample_store):
+    from uma.strategies.rules import ANSWERING_RULES
+
+    llm = FakeLLM([text_response("x")], token_count=40_000)
+    await _run(sample_store, llm)
+    assert llm.calls[0]["system"].startswith(ANSWERING_RULES)
+
+
+async def test_trailing_partial_tag_is_flushed_as_text(sample_store):
+    llm = FakeLLM([text_response("Answer <sta")], token_count=40_000)
+    events = await _run(sample_store, llm)
+    deltas = "".join(e.text for e in events if isinstance(e, TextDelta))
+    assert deltas == "Answer <sta" == events[-1].answer.text

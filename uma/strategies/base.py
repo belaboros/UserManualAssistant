@@ -219,6 +219,9 @@ async def run_single_call(
                     return
                 raw, citations = assemble_cited_text(response.content, resolve)
                 text, status, _ = strip_status(raw)
+                rest, _, _ = filt.finish()
+                if rest:
+                    yield TextDelta(rest)
                 u = response.usage
                 metrics = Metrics(
                     latency_ms=round((time.perf_counter() - started) * 1000),
