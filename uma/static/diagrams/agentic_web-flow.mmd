@@ -1,0 +1,13 @@
+flowchart LR
+    Q["Question"] -->|"question"| LP["Local phase<br/>search / read_section loop"]
+    DB[("SQLite corpus")] -->|"hits, section text"| LP
+    LP -->|"notes with [§id] markers"| FL{"finish_phase planner<br/>sufficient? gaps"}
+    LP -.->|"budget reached"| FC1["Force-close<br/>local phase"]
+    FC1 --> FL
+    FL -->|"gaps to check"| WP["Web phase<br/>web_search loop,<br/>at least one search"]
+    WS["Web search<br/>Claude server tool"] -->|"results, URLs"| WP
+    WP -->|"notes with [web:url] markers"| FW{"finish_phase planner<br/>sufficient? gaps"}
+    WP -.->|"budget reached"| FC2["Force-close<br/>web phase"]
+    FC2 --> FW
+    FW -->|"manual notes + web notes"| MG["Merge call<br/>no tools"]
+    MG -->|"streamed answer with [n] citations,<br/>⚠ conflict blocks"| UI["Web UI"]

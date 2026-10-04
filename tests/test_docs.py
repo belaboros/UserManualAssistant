@@ -27,7 +27,7 @@ def test_every_api_diagram_exists(tmp_path):
     settings = Settings(db_path=tmp_path / "uma.db")
     client = TestClient(create_app(settings, llm=FakeLLM([]), embedder=object()))
     strategies = client.get("/api/strategies").json()
-    assert len(strategies) == 4
+    assert len(strategies) == 5
     for s in strategies:
         for kind in ("flow", "sequence"):
             path = STATIC / s[kind].removeprefix("/static/")

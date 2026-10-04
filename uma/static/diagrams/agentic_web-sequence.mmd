@@ -1,0 +1,33 @@
+sequenceDiagram
+    participant UI as Web UI
+    participant A as App
+    participant C as Claude
+    participant DB as Corpus
+    participant W as Web search
+    UI->>A: GET stream for question
+    Note over A,C: Local phase
+    loop until finish_phase or budget reached
+        A->>C: messages, local tools
+        C-->>A: tool_use search or read_section
+        A->>DB: search / read_section
+        DB-->>A: hits or section text
+        A-->>UI: SSE trace
+    end
+    C-->>A: finish_phase(sufficient, gaps)
+    Note over A,C: Web phase, at least one web_search
+    loop until finish_phase or budget reached
+        A->>C: messages, web_search server tool
+        C->>W: web_search (Claude's server tool)
+        W-->>C: results with URLs
+        opt pause_turn
+            C-->>A: pause_turn
+            Note over A: App re-sends the turn to resume
+        end
+        C-->>A: notes with sources
+        A-->>UI: SSE trace
+    end
+    C-->>A: finish_phase(sufficient, gaps)
+    A->>C: merge call, manual notes + web notes, no tools
+    C-->>A: streamed answer text
+    A-->>UI: SSE delta with [n] citations and ⚠ conflict blocks
+    A-->>UI: SSE final
