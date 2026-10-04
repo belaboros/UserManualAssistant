@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS answers(
   latency_ms INTEGER, input_tokens INTEGER, output_tokens INTEGER,
   cache_read_tokens INTEGER, cache_write_tokens INTEGER, cost_usd REAL,
   manuals_used_json TEXT, tool_calls INTEGER,
+  web_searches INTEGER,
   PRIMARY KEY(question_id, strategy));
 CREATE TABLE IF NOT EXISTS votes(
   question_id TEXT NOT NULL, strategy TEXT NOT NULL, stars INTEGER NOT NULL,
@@ -48,7 +49,7 @@ def _answer_row(r: sqlite3.Row) -> dict:
         "output_tokens": r["output_tokens"], "cache_read_tokens": r["cache_read_tokens"],
         "cache_write_tokens": r["cache_write_tokens"], "cost_usd": r["cost_usd"],
         "manuals_used": json.loads(r["manuals_used_json"]) if r["manuals_used_json"] else [],
-        "tool_calls": r["tool_calls"],
+        "tool_calls": r["tool_calls"], "web_searches": r["web_searches"] or 0,
         "answer": None,
     }
     if not failed:
@@ -62,7 +63,7 @@ def _answer_row(r: sqlite3.Row) -> dict:
                     "cache_write_tokens": r["cache_write_tokens"],
                 },
                 "cost_usd": r["cost_usd"], "manuals_used": d["manuals_used"],
-                "tool_calls": r["tool_calls"],
+                "tool_calls": r["tool_calls"], "web_searches": d["web_searches"],
             },
         }
     return d
@@ -74,6 +75,9 @@ class Log:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         with closing(self._conn()) as c, c:
             c.executescript(_SCHEMA)
+            cols = {row["name"] for row in c.execute("PRAGMA table_info(answers)")}
+            if "web_searches" not in cols:
+                c.execute("ALTER TABLE answers ADD COLUMN web_searches INTEGER")
 
     def _conn(self) -> sqlite3.Connection:
         c = sqlite3.connect(self.db_path)
@@ -113,11 +117,12 @@ class Log:
         self._run(
             "INSERT OR REPLACE INTO answers(question_id, strategy, status, text, citations_json,"
             " trace_json, error, latency_ms, input_tokens, output_tokens, cache_read_tokens,"
-            " cache_write_tokens, cost_usd, manuals_used_json, tool_calls)"
-            " VALUES(?,?,?,?,?,?,NULL,?,?,?,?,?,?,?,?)",
+            " cache_write_tokens, cost_usd, manuals_used_json, tool_calls,"
+            " web_searches) VALUES(?,?,?,?,?,?,NULL,?,?,?,?,?,?,?,?,?)",
             (question_id, strategy_id, d["status"], d["text"], json.dumps(d["citations"]), trace_json,
              m["latency_ms"], u["input_tokens"], u["output_tokens"], u["cache_read_tokens"],
-             u["cache_write_tokens"], m["cost_usd"], json.dumps(m["manuals_used"]), m["tool_calls"]),
+             u["cache_write_tokens"], m["cost_usd"], json.dumps(m["manuals_used"]), m["tool_calls"],
+             m["web_searches"]),
         )
 
     def answers_for(self, question_id: str) -> dict[str, dict]:

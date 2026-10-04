@@ -6,10 +6,13 @@ flowchart LR
     API -->|"question"| S1["Whole-context"]
     API -->|"question"| S2["RAG"]
     API -->|"question"| S3["Agentic"]
+    API -->|"question"| S4["Agentic & web"]
     DB -->|"all sections"| S1
     DB -->|"chunks via hybrid search"| S2
     DB -->|"list_manuals, search, read_section"| S3
-    S0 & S1 & S2 & S3 -->|"streamed answer events"| API
+    DB -->|"list_manuals, search, read_section"| S4
+    WEB["Web search<br/>Claude server tool"] -->|"search results with URLs"| S4
+    S0 & S1 & S2 & S3 & S4 -->|"streamed answer events"| API
     API -->|"SSE"| UI
     UI -->|"votes"| API
     API -->|"question, answers, trace, votes"| LOG[("SQLite log<br/>questions, answers, votes")]

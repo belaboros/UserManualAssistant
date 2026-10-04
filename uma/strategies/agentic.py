@@ -11,11 +11,9 @@ from uma.config import Settings, cost_usd
 from uma.corpus.store import CorpusStore
 from uma.embedding import Embedder
 from uma.llm import LLM, Completed, LLMError, LLMResponse, TextChunk, Usage
-from uma.search import hybrid_search
 from uma.strategies.base import (
     Answer,
     AnswerEvent,
-    Citation,
     Failed,
     Final,
     Metrics,
@@ -27,51 +25,16 @@ from uma.strategies.base import (
     strip_status,
     warn_missing_status,
 )
+from uma.strategies.manual_tools import MANUAL_TOOLS, ManualTools, ToolError
 from uma.strategies.rules import AGENTIC_ADDENDUM, ANSWERING_RULES
 
 logger = logging.getLogger(__name__)
 
-TOOLS: list[dict] = [
-    {
-        "name": "list_manuals",
-        "description": "List every manual: id, title, owner and number of sections.",
-        "strict": True,
-        "input_schema": {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
-    },
-    {
-        "name": "search",
-        "description": (
-            "Search the manuals. Returns up to 8 lines: section_id | manual title | heading path | "
-            "excerpt. Optionally restrict to one manual by id (null searches all manuals)."
-        ),
-        "strict": True,
-        "input_schema": {
-            "type": "object",
-            "properties": {"query": {"type": "string"}, "manual_id": {"type": ["string", "null"]}},
-            "required": ["query", "manual_id"],
-            "additionalProperties": False,
-        },
-    },
-    {
-        "name": "read_section",
-        "description": "Read the full text of one section by its section_id.",
-        "strict": True,
-        "input_schema": {
-            "type": "object",
-            "properties": {"section_id": {"type": "string"}},
-            "required": ["section_id"],
-            "additionalProperties": False,
-        },
-    },
-]
+TOOLS = MANUAL_TOOLS
 
 _EXHAUSTED = "Tool budget exhausted. Answer now."
 _BUDGET_NOTICE = "Tool budget reached. Answer now with what you have."
 _NOT_FINISHED = "The agent did not finish within its tool budget"
-
-
-class _ToolError(Exception):
-    """A tool failure reported back to the model as an is_error result."""
 
 
 class AgenticStrategy:
@@ -80,49 +43,10 @@ class AgenticStrategy:
 
     def __init__(self, store: CorpusStore, embedder: Embedder, llm: LLM, settings: Settings) -> None:
         self.store, self.embedder, self.llm, self.settings = store, embedder, llm, settings
-
-    @property
-    def _titles(self) -> dict[str, str]:
-        # Read per use so manuals ingested while the server runs are picked up.
-        return {m.meta.id: m.meta.title for m in self.store.manuals()}
-
-    # --- tools -------------------------------------------------------------------------
+        self.manual_tools = ManualTools(store, embedder)
 
     def _run_tool(self, name: str, tool_input: object) -> str:
-        args = tool_input if isinstance(tool_input, dict) else {}
-        if name == "list_manuals":
-            return "\n".join(
-                f"{m.meta.id} | {m.meta.title} | {m.meta.owner} | {m.section_count} sections"
-                for m in self.store.manuals()
-            )
-        if name == "search":
-            query, manual_id = args.get("query"), args.get("manual_id")
-            if not isinstance(query, str) or not (manual_id is None or isinstance(manual_id, str)):
-                raise _ToolError("search needs query (string) and manual_id (string or null)")
-            hits = hybrid_search(self.store, self.embedder, query, k=8, manual_id=manual_id)
-            if not hits:
-                return "No results."
-            return "\n".join(
-                f"{h.section.id} | {self._titles.get(h.chunk.manual_id, h.chunk.manual_id)} | "
-                f"{' › '.join(h.section.heading_path)} | {' '.join(h.chunk.text[:300].split())}"
-                for h in hits
-            )
-        if name == "read_section":
-            section_id = args.get("section_id")
-            if not isinstance(section_id, str):
-                raise _ToolError("read_section needs section_id (string)")
-            section = self.store.section(section_id)
-            if section is None:
-                raise _ToolError(f"Unknown section_id: {section_id}")
-            return f"{' › '.join(section.heading_path)}\n\n{section.text}"
-        raise _ToolError(f"Unknown tool: {name}")
-
-    def _lookup(self, section_id: str) -> Citation | None:
-        section = self.store.section(section_id)
-        if section is None:
-            return None
-        title = self._titles.get(section.manual_id, section.manual_id)
-        return Citation(section.manual_id, title, section.id, section.heading_path, "")
+        return self.manual_tools.run(name, tool_input)
 
     # --- loop --------------------------------------------------------------------------
 
@@ -167,7 +91,7 @@ class AgenticStrategy:
                 text, status, found = strip_status(raw)
                 if not found:
                     warn_missing_status(self.id, logger)
-                text, citations = resolve_section_markers(text, self._lookup)
+                text, citations = resolve_section_markers(text, self.manual_tools.lookup)
                 metrics = Metrics(
                     latency_ms=round((time.perf_counter() - started) * 1000),
                     usage=usage,
@@ -194,7 +118,7 @@ class AgenticStrategy:
                         output = await asyncio.to_thread(self._run_tool, name, tool_input)
                         result["content"] = output
                         summary = output.splitlines()[0] if output else ""
-                    except _ToolError as e:
+                    except ToolError as e:
                         result.update(content=str(e), is_error=True)
                         summary = "error"
                     yield TraceStep("tool_call", {"name": name, "input": tool_input, "summary": summary})

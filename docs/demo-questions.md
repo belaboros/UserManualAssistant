@@ -1,7 +1,7 @@
 # Demo questions
 
-These questions are built to show where each strategy shines and where it struggles. The first five
-work against the bundled sample manuals in [`sample_manuals/`](../sample_manuals/), three short
+These questions are built to show where each strategy shines and where it struggles. Questions 1
+to 5, 7 and 8 work against the bundled sample manuals in [`sample_manuals/`](../sample_manuals/), three short
 manuals for a fictional smart-home product line:
 
 | Manual | Folder | Files |
@@ -15,7 +15,7 @@ Section references below are given as *manual › file › heading*, with the se
 brackets; the planted cases are checked by
 [`tests/test_sample_corpus.py`](../tests/test_sample_corpus.py).
 
-The sixth question uses a different corpus, a short news-style manual about Tesla FSD in Europe, to
+Questions 6 and 9 use a different corpus, a short news-style manual about Tesla FSD in Europe, to
 show the [no-retrieval baseline](strategies/0-baseline.md) meeting events after its training cutoff.
 
 Model output varies from run to run, especially for the agentic strategy, so treat "expected
@@ -26,6 +26,13 @@ often the more interesting lesson.
 the manuals: it answers from the model's own knowledge. The Nimbus products are fictional, so on
 questions 1 to 5 it is the control group. Whatever it gets right, it got without retrieval; whatever
 it invents shows what retrieval protects against. It never has citations.
+
+**The Agentic & web column.** The rightmost column, [Agentic & web](strategies/4-agentic-web.md),
+researches the manuals like Agentic and then searches the web. The tables for questions 1 to 6
+compare the manuals-only columns; for Agentic & web, compare its local phase with the Agentic
+column, then look at what the web phase adds. On question 2, for example, expect it to fill the
+Alexa gap from general web pages and say that the manuals don't cover it. Its main lesson,
+conflict detection, has its own [section below](#conflict-detection-with-agentic--web).
 
 ## 1. "How do I pair the thermostat with the hub?"
 
@@ -185,6 +192,76 @@ cutoff, and the baseline column shows that boundary directly. Retrieval lets the
 correctly about events it has never seen, with citations a reader can check. The other questions in
 [`UAT.md`](../sample_manuals_for_UAT/UAT.md) push the same corpus further (combining dates,
 Supercharger coverage and geography); expect the baseline to struggle on all of them.
+
+## Conflict detection with Agentic & web
+
+These questions target claims that could plausibly change after a manual was written: hardware
+support, firmware procedures, approvals. The Agentic & web column checks them on the web and should
+write a highlighted conflict block when the web disagrees:
+
+> ⚠ **Conflict: the manual may be out of date.** The manual says X [1]. The web says Y [2].
+
+What the web says changes over time, so no result is promised here. Look for the same things on
+every run: the web queries in the trace, the two planner lines, whether a conflict block appears
+and which sources it cites, and the status badge (`contradiction_found` when there is a conflict,
+otherwise `answered`). The Nimbus products are fictional, so on questions 7 and 8 web results can
+only be about other products or about thermostats in general; the lesson there is whether the
+column keeps those apart from the manual. Question 9 uses a dated real-world corpus, where a genuine
+conflict is possible.
+
+### 7. "Can the Nimbus Thermostat connect to a 5 GHz Wi-Fi network?"
+
+**The manual's claim:** Nimbus Thermostat User Manual › `settings.md` › Wi-Fi
+(`nimbus-thermostat:settings:wi-fi`): the thermostat connects to 2.4 GHz networks only and cannot
+use 5 GHz-only networks; the Specifications table in `getting-started.md` agrees (Wi-Fi 2.4 GHz,
+802.11 b/g/n). A distractor: the Nimbus Hub *does* support 5 GHz (Hub Guide › Network › Wi-Fi), so
+an answer that says "yes, 5 GHz works" from the hub's section has mixed up the devices.
+
+**What to look for:**
+
+- The local planner should report the manuals as sufficient: the answer is "no, 2.4 GHz only".
+- The web phase should still search, because it must check the claim. Look for a query about the
+  thermostat's Wi-Fi bands or a newer hardware revision.
+- A good run finds nothing about this fictional thermostat and either writes no conflict block or
+  says explicitly that the web results are about other products. A conflict block that cites
+  another brand's thermostat as proof that "the Nimbus now supports 5 GHz" is a **false conflict**:
+  open the web citation to check.
+
+### 8. "How do I update the thermostat's firmware, and how long does it take?"
+
+**The manual's claim:** Nimbus Thermostat User Manual › `settings.md` › Firmware updates
+(`nimbus-thermostat:settings:firmware-updates`): the thermostat checks once a day; install now with
+**Menu > Settings > Firmware > Update now**; the update takes about five minutes; don't switch off
+the power. Menu paths and durations are typical of what changes between firmware versions.
+
+**What to look for:**
+
+- The answer should give the manual's steps first, with manual citations.
+- The web queries: does the web phase look for a newer menu path, a newer firmware version or
+  release notes, or only repeat the question?
+- Any web content should come with web citations (they open the page in a new tab) and be
+  clearly separated from the manual's procedure. Compare the cost and latency in the footer with
+  the Agentic column: if the web adds nothing, that difference is the price of checking.
+
+### 9. "Which European countries have approved Tesla FSD (Supervised)?"
+
+**The manual's claim:** this uses the UAT corpus from question 6 (load it with
+`uv run python -m uma ingest --manuals-dir sample_manuals_for_UAT`). TeslaFSD in Europe ›
+`Tesla_insider_on_3-OCT-2026.md` lists eight countries as of early October 2026, says Croatia's
+rollout "will begin soon", and says the EU-wide vote has moved to December at the earliest. Unlike
+question 6, the question has no date, so "so far" means today, and approvals made after the article
+are exactly what a web check can catch.
+
+**What to look for:**
+
+- The local planner should find the eight countries and may list "approvals after early October
+  2026" or "the outcome of the EU vote" as gaps.
+- The web queries should check the country list and the EU vote.
+- If the web reports approvals or an EU decision the article doesn't have, expect a conflict block
+  that cites the article and the web page, and the status `contradiction_found`. That is the
+  column's purpose: it tells the manual's owner that the article needs updating. If the web agrees
+  with the article, expect `answered` and no conflict block.
+- Compare with the Agentic column, which can only repeat the article's list.
 
 ## After the questions
 

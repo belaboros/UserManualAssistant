@@ -140,7 +140,7 @@ call there is about $0.009 (see the
 because the baseline's input never does. The prompt is also far too short to be cached, so the
 cache-read and cache-write prices don't apply.
 
-Latency is the lowest of the four columns: no search, no tool turns, and only a couple of hundred
+Latency is the lowest of the five columns: no search, no tool turns, and only a couple of hundred
 input tokens to process before the first word. The extra cost of running the baseline alongside the
 other strategies is one more small call per question.
 

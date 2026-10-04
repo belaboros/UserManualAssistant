@@ -1,7 +1,7 @@
 "use strict";
 (function () {
   const MODE_KEY = "uma-mode";
-  // Blind labels end at Z: three columns are X/Y/Z, four are W/X/Y/Z.
+  // Blind labels end at Z: three columns are X/Y/Z, four are W/X/Y/Z, five are V/W/X/Y/Z.
   function blindLabel(i, n) {
     return "Answer " + String.fromCharCode("Z".charCodeAt(0) - (n - 1) + i);
   }
@@ -64,6 +64,20 @@
     return DOMPurify.sanitize(marked.parse(text));
   }
 
+  // A web citation links straight to the page (new tab); a non-http(s) URL stays plain text.
+  function webCitation(n, cit) {
+    const label = "[" + n + "]";
+    if (typeof cit.url !== "string" || !/^https?:/i.test(cit.url)) return document.createTextNode(label);
+    const a = document.createElement("a");
+    a.className = "cite";
+    a.href = cit.url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    a.title = cit.manual_title || cit.url;
+    a.textContent = label;
+    return a;
+  }
+
   // Replace [n] in text nodes of already-sanitized HTML with citation buttons.
   function linkCitations(html, citations, onClick) {
     const tpl = document.createElement("template");
@@ -82,6 +96,11 @@
         const cit = citations[n - 1];
         if (!cit) continue;
         frag.append(text.slice(last, m.index));
+        if (cit.kind === "web") {
+          frag.append(webCitation(n, cit));
+          last = m.index + m[0].length;
+          continue;
+        }
         const b = document.createElement("button");
         b.type = "button";
         b.className = "cite";
@@ -221,13 +240,25 @@
     });
   }
 
-  function formatMetrics(m) {
+  function webHosts(citations) {
+    const hosts = [];
+    for (const c of citations || []) {
+      if (c.kind === "web" && c.manual_id && !hosts.includes(c.manual_id)) hosts.push(c.manual_id);
+    }
+    return hosts;
+  }
+
+  function formatMetrics(m, citations) {
     const secs = ((m.latency_ms || 0) / 1000).toFixed(1);
     const u = m.usage || {};
     const cost = typeof m.cost_usd === "number" ? "$" + m.cost_usd.toFixed(4) : "$—";
     const manuals = (m.manuals_used || []).join(", ") || "—";
+    const hosts = webHosts(citations);
+    const searches = m.web_searches > 0
+      ? " · " + m.web_searches + (m.web_searches === 1 ? " web search" : " web searches") : "";
+    const sources = hosts.length ? "Manuals: " + manuals + " · Web: " + hosts.join(", ") : manuals;
     return secs + " s · " + (u.input_tokens || 0) + "/" + (u.output_tokens || 0) +
-      " tok · " + cost + " · " + manuals;
+      " tok · " + cost + searches + " · " + sources;
   }
 
   // A blind column that is not yet revealed shows a neutral placeholder instead of the live
@@ -259,12 +290,26 @@
     answer.append(document.createTextNode(p.text || ""));
   }
 
+  function traceText(p) {
+    const d = p.detail || {};
+    if (p.kind === "planner") {
+      const gaps = (d.gaps || []).length ? " (gaps: " + d.gaps.join("; ") + ")" : "";
+      return (d.phase || "") + " planner: " + (d.sufficient ? "sufficient" : "insufficient") + gaps +
+        (d.forced ? " [forced]" : "");
+    }
+    if (p.kind === "web_search") {
+      return 'web search: "' + (d.query || "") + '" → ' +
+        (d.error_code ? "error " + d.error_code : (d.result_count || 0) + " results");
+    }
+    let detail = "";
+    try { detail = JSON.stringify(d); } catch (e) { /* ignore */ }
+    return p.kind + (detail && detail !== "{}" ? " " + detail : "");
+  }
+
   function onTrace(col, p) {
     $(".trace", col).hidden = false;
     const li = document.createElement("li");
-    let detail = "";
-    try { detail = JSON.stringify(p.detail || {}); } catch (e) { /* ignore */ }
-    li.textContent = p.kind + (detail && detail !== "{}" ? " " + detail : "");
+    li.textContent = traceText(p);
     $(".trace-list", col).append(li);
   }
 
@@ -278,11 +323,14 @@
     // Replaces everything streamed so far (preamble, raw [§id] markers) or the placeholder.
     const html = renderMarkdown(a.text || "");
     answerEl.replaceChildren(linkCitations(html, a.citations || [], openSection));
+    answerEl.querySelectorAll("blockquote").forEach((bq) => {
+      if (/^\s*⚠️?\s*Conflict/.test(bq.textContent)) bq.classList.add("conflict");
+    });
     const badge = $(".status-badge", col);
     badge.textContent = STATUS_TEXT[a.status] || a.status;
     badge.dataset.status = a.status;
     badge.hidden = false;
-    $(".metrics", col).textContent = formatMetrics(a.metrics || {});
+    $(".metrics", col).textContent = formatMetrics(a.metrics || {}, a.citations);
     setStars(col, 0, false);
   }
 

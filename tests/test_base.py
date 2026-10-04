@@ -20,6 +20,15 @@ CIT = {
 CIT_BY_ID = {"m:a:x": CIT["hub"]}
 
 
+def test_web_citation_serialises():
+    web = Citation("example.com", "Page", "https://example.com/a", (), "", kind="web", url="https://example.com/a")
+    answer = Answer("x [1]", [web], "answered", Metrics(1, Usage(1, 1, 0, 0), None, []))
+    d = answer_to_dict(answer)
+    assert d["citations"][0]["kind"] == "web" and d["citations"][0]["url"] == "https://example.com/a"
+    json.dumps(d)
+    assert CIT["hub"].kind == "manual" and CIT["hub"].url is None
+
+
 def run(chunks):
     f = StatusTagFilter()
     shown = "".join(f.feed(c) for c in chunks)
@@ -153,3 +162,17 @@ async def test_run_single_call_valid_tag_logs_nothing(caplog):
     with caplog.at_level(logging.WARNING, logger="uma.strategies.base"):
         await _single(FakeLLM([text_response("Ok.\n<status>not_covered</status>")]))
     assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+
+
+def test_resolve_mixed_markers_shares_numbering():
+    from uma.strategies.base import resolve_mixed_markers
+    from uma.strategies.web_sources import WebSources
+
+    s1 = Citation("m", "M", "s1", ("H",), "t")
+    ws = WebSources()
+    ws.add("https://a.example/x", "A")
+    text, cits = resolve_mixed_markers(
+        "A [§s1]. B [web:1]. C [§s1]. D [web:9]. E [§zz].",
+        lambda sid: s1 if sid == "s1" else None, ws)
+    assert text == "A [1]. B [2]. C [1]. D . E ."
+    assert cits == [s1, ws.citation(1)]
