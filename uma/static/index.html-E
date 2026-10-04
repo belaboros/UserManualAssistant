@@ -29,9 +29,9 @@
     </form>
     <p id="question-error" role="alert" hidden></p>
     <div id="columns">
-      <section class="column" data-strategy="whole_context" aria-labelledby="title-whole_context">
+      <section class="column" data-strategy="whole_context" aria-label="Whole-context">
         <header class="column-head">
-          <h2 class="column-title" id="title-whole_context">Whole-context</h2>
+          <h2 class="column-title">Whole-context</h2>
           <span class="status-badge" hidden></span>
         </header>
         <div class="answer" aria-live="polite"></div>
@@ -50,9 +50,9 @@
         </div>
         <p class="vote-error" role="alert" hidden></p>
       </section>
-      <section class="column" data-strategy="rag" aria-labelledby="title-rag">
+      <section class="column" data-strategy="rag" aria-label="RAG">
         <header class="column-head">
-          <h2 class="column-title" id="title-rag">RAG</h2>
+          <h2 class="column-title">RAG</h2>
           <span class="status-badge" hidden></span>
         </header>
         <div class="answer" aria-live="polite"></div>
@@ -71,9 +71,9 @@
         </div>
         <p class="vote-error" role="alert" hidden></p>
       </section>
-      <section class="column" data-strategy="agentic" aria-labelledby="title-agentic">
+      <section class="column" data-strategy="agentic" aria-label="Agentic">
         <header class="column-head">
-          <h2 class="column-title" id="title-agentic">Agentic</h2>
+          <h2 class="column-title">Agentic</h2>
           <span class="status-badge" hidden></span>
         </header>
         <div class="answer" aria-live="polite"></div>

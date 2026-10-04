@@ -84,7 +84,7 @@
         b.className = "cite";
         b.textContent = "[" + n + "]";
         b.title = cit.manual_title + " › " + (cit.heading_path || []).join(" › ");
-        b.addEventListener("click", () => onClick(cit.section_id));
+        b.addEventListener("click", () => onClick(cit.section_id, b));
         frag.append(b);
         last = m.index + m[0].length;
       }
@@ -120,8 +120,9 @@
       col.dataset.label = BLIND_LABELS[i];
       const hidden = blind && !(state.question && state.question.revealed.has(id));
       $(".column-title", col).textContent = hidden ? col.dataset.label : titleOf(id);
-      show($(".reveal", col), hidden);
+      show($(".reveal", col), hidden && !!state.question);
       show($(".how-it-works", col), !hidden);
+      col.classList.toggle("blind-hidden", hidden);
     });
   }
 
@@ -133,6 +134,7 @@
     $(".column-title", col).textContent = col.dataset.label + " — " + titleOf(id);
     show($(".reveal", col), false);
     show($(".how-it-works", col), true);
+    col.classList.remove("blind-hidden");
   }
 
   // ---- column state ----
@@ -153,6 +155,8 @@
     const err = $(".vote-error", col);
     err.hidden = true;
     err.textContent = "";
+    delete col.dataset.voting;
+    col.dataset.rating = "0";
     setStars(col, 0, true);
   }
 
@@ -308,6 +312,10 @@
     const id = col.dataset.strategy;
     const err = $(".vote-error", col);
     err.hidden = true;
+    if (col.dataset.voting) return;
+    col.dataset.voting = "1";
+    const prev = Number(col.dataset.rating || 0);
+    col.querySelectorAll(".stars button").forEach((b) => { b.disabled = true; });
     let ok = false;
     let msg = "";
     try {
@@ -321,21 +329,32 @@
     } catch (e) {
       msg = "Could not reach the server.";
     }
+    delete col.dataset.voting;
     if (state.question !== q) return; // a new question started meanwhile
     if (!ok) {
       err.textContent = "Rating not saved: " + msg;
       err.hidden = false;
+      setStars(col, prev, false);
       return;
     }
+    col.dataset.rating = String(stars);
     setStars(col, stars, false);
     q.rated.add(id);
     if (q.blind) reveal(id);
   }
 
   // ---- citation panel ----
-  function closePanel() { panel.hidden = true; state.panelSeq++; }
+  let panelOpener = null;
+  function closePanel(restoreFocus) {
+    panel.hidden = true;
+    state.panelSeq++;
+    const opener = panelOpener;
+    panelOpener = null;
+    if (restoreFocus === true && opener && opener.isConnected) opener.focus();
+  }
 
-  async function openSection(sectionId) {
+  async function openSection(sectionId, opener) {
+    if (opener) panelOpener = opener;
     const seq = ++state.panelSeq;
     panel.hidden = false;
     $("#panel-title").textContent = "Loading…";
@@ -350,7 +369,7 @@
       $("#panel-title").textContent = s.manual_title;
       $("#panel-path").textContent = (s.heading_path || []).join(" › ");
       $("#panel-body").innerHTML = renderMarkdown(s.text || "");
-      if (s.source_url) {
+      if (s.source_url && /^https?:\/\//i.test(s.source_url)) {
         const link = $("#panel-source");
         link.href = s.source_url;
         link.hidden = false;
@@ -367,6 +386,7 @@
   let mermaidReady = false;
   let diagramCounter = 0;
   async function renderDiagram(url, box, title) {
+    if (!url) throw new Error("not available");
     const resp = await fetch(url);
     if (!resp.ok) throw new Error("not available");
     const source = await resp.text();
@@ -434,10 +454,12 @@
     else if (btn.classList.contains("reveal")) reveal(col.dataset.strategy);
     else if (btn.classList.contains("how-it-works")) openHowItWorks(col.dataset.strategy);
   });
-  $("#panel-close").addEventListener("click", closePanel);
+  $("#panel-close").addEventListener("click", () => closePanel(true));
   $("#how-close").addEventListener("click", () => dialog.close());
   document.addEventListener("keydown", (ev) => {
-    if (ev.key === "Escape" && !panel.hidden) closePanel();
+    if (ev.key !== "Escape") return;
+    if (dialog.open) return; // the dialog handles Escape itself; panel stays open beneath
+    if (!panel.hidden) closePanel(true);
   });
 
   async function init() {
