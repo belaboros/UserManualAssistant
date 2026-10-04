@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import copy
 import os
 import subprocess
@@ -93,17 +94,18 @@ class AnthropicLLM:
         self.settings = settings
         self._client = client
 
-    def _get_client(self):
-        if not credentials_available():
-            raise LLMError(MISSING_KEY_MESSAGE)
+    async def _get_client(self):
         if self._client is None:
+            # May spawn `ant auth status`; keep it off the event loop. Checked once, at client creation.
+            if not await asyncio.to_thread(credentials_available):
+                raise LLMError(MISSING_KEY_MESSAGE)
             self._client = anthropic.AsyncAnthropic()
         return self._client
 
     async def stream(
         self, *, system: str, messages: list[dict], tools: list[dict] | None = None
     ) -> AsyncIterator[TextChunk | Completed]:
-        client = self._get_client()
+        client = await self._get_client()
         kwargs: dict = {
             "model": self.settings.model,
             "max_tokens": 16000,
@@ -124,10 +126,11 @@ class AnthropicLLM:
                 final = await stream.get_final_message()
         except anthropic.APIError as exc:
             raise _to_llm_error(exc) from exc
+        # With a server-side fallback, top-level usage covers only the attempt that produced this message.
         u = final.usage
         yield Completed(
             LLMResponse(
-                content=[b.model_dump(exclude_none=True) for b in final.content],
+                content=[b.model_dump(mode="json", by_alias=True, exclude_none=True) for b in final.content],
                 stop_reason=final.stop_reason,
                 usage=Usage(
                     u.input_tokens,
@@ -139,7 +142,7 @@ class AnthropicLLM:
         )
 
     async def count_tokens(self, *, system: str, messages: list[dict]) -> int:
-        client = self._get_client()
+        client = await self._get_client()
         try:
             result = await client.messages.count_tokens(
                 model=self.settings.model, system=system, messages=messages
@@ -162,7 +165,8 @@ class FakeLLM:
         self, *, system: str, messages: list[dict], tools: list[dict] | None = None
     ) -> AsyncIterator[TextChunk | Completed]:
         self.calls.append({"system": system, "messages": messages, "tools": tools})
-        assert self._next < len(self.responses), "FakeLLM ran out of scripted responses"
+        if self._next >= len(self.responses):
+            raise AssertionError("FakeLLM ran out of scripted responses")
         response = copy.deepcopy(self.responses[self._next])
         self._next += 1
         for block in response.content:
@@ -177,8 +181,8 @@ class FakeLLM:
         return self.token_count
 
 
-def text_response(text: str, citations: list[dict] | None = None, usage: Usage = Usage(10, 5)) -> LLMResponse:
+def text_response(text: str, citations: list[dict] | None = None, usage: Usage | None = None) -> LLMResponse:
     block: dict = {"type": "text", "text": text}
     if citations is not None:
         block["citations"] = citations
-    return LLMResponse([block], "end_turn", usage)
+    return LLMResponse([block], "end_turn", usage if usage is not None else Usage(10, 5))

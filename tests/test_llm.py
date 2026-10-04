@@ -23,7 +23,8 @@ class _Block:
     def __init__(self, data):
         self._data = data
 
-    def model_dump(self, exclude_none=False):
+    def model_dump(self, exclude_none=False, **kwargs):
+        self.dump_kwargs = kwargs
         return {k: v for k, v in self._data.items() if not (exclude_none and v is None)}
 
 
@@ -130,6 +131,7 @@ async def test_anthropic_llm_request_shape(creds):
     llm = AnthropicLLM(load_settings({}), client=client)
     events = [e async for e in llm.stream(system="s", messages=[{"role": "user", "content": "q"}])]
     kw = client.last_kwargs
+    assert kw["system"] == "s" and kw["messages"] == [{"role": "user", "content": "q"}]
     assert kw["model"] == "claude-sonnet-5-5" and kw["thinking"] == {"type": "adaptive"}
     assert kw["output_config"] == {"effort": "medium"} and kw["betas"] == ["server-side-fallback-2026-07-01"]
     assert kw["extra_body"] == {"fallbacks": "default"} and "tool_choice" not in kw
@@ -189,3 +191,21 @@ def test_credentials_available_ant_fallback(monkeypatch):
     assert credentials_available() is True
     monkeypatch.setattr(subprocess, "run", lambda *a, **k: SimpleNamespace(returncode=1))
     assert credentials_available() is False
+
+
+async def test_content_is_dumped_with_wire_names(creds):
+    from anthropic.types.beta import BetaTextBlock
+
+    block = BetaTextBlock(type="text", text="hi", citations=None)
+    msg = fake_sdk_message()
+    msg.content = [block]
+    client = RecordingClient(final_message=msg)
+    events = [e async for e in AnthropicLLM(load_settings({}), client=client).stream(system="s", messages=[])]
+    assert events[-1].response.content == [{"type": "text", "text": "hi"}]
+
+
+async def test_dump_uses_by_alias(creds):
+    msg = fake_sdk_message()
+    client = RecordingClient(final_message=msg)
+    _ = [e async for e in AnthropicLLM(load_settings({}), client=client).stream(system="s", messages=[])]
+    assert msg.content[0].dump_kwargs == {"mode": "json", "by_alias": True}
