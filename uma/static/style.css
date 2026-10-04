@@ -61,3 +61,21 @@ button.cite { padding: 0 .3rem; margin: 0 .1rem; font-size: .75rem; vertical-ali
 #how-body svg { max-width: 100%; height: auto; }
 #how-body h3 { margin-bottom: .25rem; }
 .column.blind-hidden .metrics, .column.blind-hidden .trace { display: none; }
+.lb-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin-bottom: 1rem; }
+.lb-controls select { font: inherit; padding: .3rem .5rem; border: 1px solid var(--border);
+  border-radius: 6px; background: var(--bg); color: var(--fg); }
+.button-link { display: inline-block; border: 1px solid var(--border); background: var(--card);
+  border-radius: 6px; padding: .35rem .8rem; color: var(--fg); text-decoration: none; }
+#lb-error { color: var(--bad); }
+.table-wrap { overflow-x: auto; margin-bottom: 1.5rem; }
+.table-wrap table { border-collapse: collapse; width: 100%; font-size: .95rem; }
+.table-wrap th, .table-wrap td { text-align: left; padding: .4rem .6rem; border-bottom: 1px solid var(--border); }
+.table-wrap thead th { color: var(--muted); font-weight: 600; white-space: nowrap; }
+.q-text { max-width: 36rem; overflow-wrap: anywhere; }
+.dist-bar { display: flex; min-width: 9rem; height: 1.4rem; border-radius: 4px; overflow: hidden;
+  border: 1px solid var(--border); }
+.dist-seg { display: flex; align-items: center; justify-content: center; font-size: .75rem;
+  color: #fff; min-width: 0; overflow: hidden; }
+.dist-1 { background: #b42318; } .dist-2 { background: #c2570c; } .dist-3 { background: #8a6d00; }
+.dist-4 { background: #3f7d20; } .dist-5 { background: #1a7f37; }
+.dist-empty { padding: 0 .4rem; color: var(--muted); }

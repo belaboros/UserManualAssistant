@@ -26,3 +26,22 @@ def test_index_has_required_elements(tmp_path):
         assert "aria-labelledby=" in tag, tag
     assert client.get("/static/app.js").status_code == 200
     assert client.get("/static/style.css").status_code == 200
+
+
+LEADERBOARD_REQUIRED = [
+    'id="mode-filter"', 'value="all"', 'value="blind"', 'value="labelled"',
+    'id="leaderboard-table"', 'id="recent-table"', 'id="export-csv"', 'id="reset-votes"',
+    'href="/api/export.csv"', 'href="/"', 'href="/leaderboard"',
+    'src="/static/leaderboard.js"', 'href="/static/style.css"',
+]
+
+
+def test_leaderboard_page_has_required_elements(tmp_path):
+    client, _ = make_client(tmp_path)
+    r = client.get("/leaderboard")
+    assert r.status_code == 200
+    for needle in LEADERBOARD_REQUIRED:
+        assert needle in r.text, needle
+    assert client.get("/static/leaderboard.js").status_code == 200
+    # The ask page links to the leaderboard too.
+    assert 'href="/leaderboard"' in client.get("/").text

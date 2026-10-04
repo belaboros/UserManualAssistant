@@ -1,3 +1,51 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><title>Leaderboard</title></head>
-<body><h1>Leaderboard</h1><p>Placeholder: the leaderboard page arrives in Task 16.</p></body></html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Leaderboard - UserManualAssistant</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>UserManualAssistant</h1>
+    <nav>
+      <a href="/">Ask</a>
+      <a href="/leaderboard" aria-current="page">Leaderboard</a>
+    </nav>
+  </header>
+  <main>
+    <div class="lb-controls">
+      <label for="mode-filter">Votes</label>
+      <select id="mode-filter">
+        <option value="all">All votes</option>
+        <option value="blind">Blind only</option>
+        <option value="labelled">Labelled only</option>
+      </select>
+      <a id="export-csv" class="button-link" href="/api/export.csv" download>Export CSV</a>
+      <button type="button" id="reset-votes">Reset votes</button>
+    </div>
+    <p id="lb-error" role="alert" hidden></p>
+    <h2>Leaderboard</h2>
+    <div class="table-wrap">
+      <table id="leaderboard-table">
+        <thead><tr>
+          <th scope="col">Rank</th><th scope="col">Strategy</th><th scope="col">Avg &#9733;</th>
+          <th scope="col">Votes</th><th scope="col">&#9733; distribution</th><th scope="col">Wins</th>
+          <th scope="col">Avg time (s)</th><th scope="col">Avg cost ($)</th>
+          <th scope="col">Not covered (%)</th><th scope="col">Errors</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <h2>Recent questions</h2>
+    <div class="table-wrap">
+      <table id="recent-table">
+        <thead></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </main>
+  <script src="/static/leaderboard.js"></script>
+</body>
+</html>
