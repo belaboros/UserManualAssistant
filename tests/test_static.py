@@ -32,6 +32,22 @@ def test_index_has_required_elements(tmp_path):
     assert client.get("/static/style.css").status_code == 200
 
 
+def test_columns_have_maximize_toggle(tmp_path):
+    client, _ = make_client(tmp_path)
+    html = client.get("/").text
+    sections = re.findall(r'<section class="column".*?</section>', html, re.S)
+    assert len(sections) == 4
+    for sec in sections:
+        buttons = re.findall(r'<button[^>]*class="maximize"[^>]*>', sec)
+        assert len(buttons) == 1, sec[:80]
+        assert 'aria-label="' in buttons[0], buttons[0]
+        assert 'aria-pressed="false"' in buttons[0], buttons[0]
+    js = client.get("/static/app.js").text
+    assert "dataset.maximized" in js
+    css = client.get("/static/style.css").text
+    assert "data-maximized" in css
+
+
 LEADERBOARD_REQUIRED = [
     'id="mode-filter"', 'value="all"', 'value="blind"', 'value="labelled"',
     'id="leaderboard-table"', 'id="recent-table"', 'id="export-csv"', 'id="reset-votes"',

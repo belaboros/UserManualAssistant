@@ -37,7 +37,8 @@ main { max-width: 1400px; margin: 0 auto; padding: 1rem; }
 .column { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1rem;
   display: flex; flex-direction: column; gap: .6rem; min-width: 0; }
 .column-head { display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
-.column-title { margin: 0; font-size: 1.05rem; }
+.column-title { margin: 0; font-size: 1.05rem; flex: 1; min-width: 0; }
+.maximize { padding: .1rem .45rem; line-height: 1.2; }
 .status-badge { font-size: .8rem; padding: .1rem .5rem; border-radius: 999px; border: 1px solid var(--border); }
 .status-badge[data-status="answered"] { color: var(--ok); }
 .status-badge[data-status="failed"] { color: var(--bad); }
@@ -64,6 +65,26 @@ button.cite { padding: 0 .3rem; margin: 0 .1rem; font-size: .75rem; vertical-ali
 #how-body svg { max-width: 100%; height: auto; }
 #how-body h3 { margin-bottom: .25rem; }
 .column.blind-hidden .metrics, .column.blind-hidden .trace { display: none; }
+/* Maximize/restore (>=700px only; below that the columns are already stacked full width).
+   The maximized column takes the remaining width, the others collapse to strips that keep
+   the on-screen order (flex follows DOM order, which layoutColumns sets). No transitions. */
+@media (min-width: 700px) {
+  #columns[data-maximized] { display: flex; align-items: stretch; }
+  #columns[data-maximized] > .column { flex: 0 0 3.5rem; }
+  #columns[data-maximized] > .column.is-maximized { flex: 1 1 0; }
+  .column.is-maximized .column-title { cursor: pointer; }
+  .column.is-collapsed { position: relative; padding: .75rem 0; align-items: center; overflow: hidden; }
+  .column.is-collapsed > :not(.column-head) { display: none; }
+  .column.is-collapsed .column-head { flex-direction: column; justify-content: flex-start; }
+  .column.is-collapsed .column-title, .column.is-collapsed .status-badge {
+    writing-mode: vertical-rl; white-space: nowrap; flex: none; }
+  .column.is-collapsed .status-badge { padding: .5rem .1rem; }
+  /* The whole strip is the (real) maximize button, drawn over the title and badge. */
+  .column.is-collapsed .maximize { position: absolute; inset: 0; width: 100%; border: 0;
+    border-radius: 8px; background: transparent; color: transparent; padding: 0; }
+  .column.is-collapsed .maximize:hover { background: rgba(127,127,127,.12); }
+  .column.is-collapsed .maximize:focus-visible { outline-offset: -3px; }
+}
 .lb-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin-bottom: 1rem; }
 .lb-controls select { font: inherit; padding: .3rem .5rem; border: 1px solid var(--border);
   border-radius: 6px; background: var(--bg); color: var(--fg); }

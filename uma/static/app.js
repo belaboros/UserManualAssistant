@@ -140,6 +140,39 @@
     col.classList.remove("blind-hidden");
   }
 
+  // ---- maximize / restore ----
+  // #columns[data-maximized="<id>"] gives one column the remaining width and collapses the
+  // others to narrow strips (CSS, >=700px only). Strips keep the on-screen (possibly shuffled)
+  // order because the layout follows DOM order. Not persisted: a reload starts with equal widths.
+  const wideQuery = window.matchMedia ? window.matchMedia("(min-width: 700px)") : null;
+  const reducedMotion = window.matchMedia ? window.matchMedia("(prefers-reduced-motion: reduce)") : null;
+  function isWide() { return !wideQuery || wideQuery.matches; }
+
+  function setMaximized(id) {
+    const target = id && columns[id] ? id : null;
+    if (target) columnsEl.dataset.maximized = target;
+    else delete columnsEl.dataset.maximized;
+    for (const [cid, col] of Object.entries(columns)) {
+      const on = cid === target;
+      col.classList.toggle("is-maximized", on);
+      col.classList.toggle("is-collapsed", !!target && !on);
+      const btn = $(".maximize", col);
+      btn.setAttribute("aria-pressed", String(on));
+      btn.setAttribute("aria-label", on ? "Restore equal widths" : "Maximize this column");
+      btn.textContent = on ? "\u2921" : "\u2922"; // ⤡ restore, ⤢ maximize
+    }
+  }
+
+  function toggleMaximize(col) {
+    if (!isWide()) { // stacked full width already: just bring the column into view
+      const smooth = !(reducedMotion && reducedMotion.matches);
+      col.scrollIntoView({ block: "start", behavior: smooth ? "smooth" : "auto" });
+      return;
+    }
+    const id = col.dataset.strategy;
+    setMaximized(columnsEl.dataset.maximized === id ? null : id);
+  }
+
   // ---- column state ----
   function resetColumn(col) {
     const answer = $(".answer", col);
@@ -478,6 +511,8 @@
     if (!state.question) layoutColumns(state.mode === "blind");
   });
   columnsEl.addEventListener("click", (ev) => {
+    const title = ev.target.closest(".column-title");
+    if (title && title.closest(".column.is-maximized") && isWide()) { setMaximized(null); return; }
     const btn = ev.target.closest("button");
     if (!btn) return;
     const col = btn.closest(".column");
@@ -485,13 +520,15 @@
     if (btn.dataset.stars) rate(col, Number(btn.dataset.stars));
     else if (btn.classList.contains("reveal")) reveal(col.dataset.strategy);
     else if (btn.classList.contains("how-it-works")) openHowItWorks(col.dataset.strategy);
+    else if (btn.classList.contains("maximize")) toggleMaximize(col);
   });
   $("#panel-close").addEventListener("click", () => closePanel(true));
   $("#how-close").addEventListener("click", () => dialog.close());
   document.addEventListener("keydown", (ev) => {
     if (ev.key !== "Escape") return;
     if (dialog.open) return; // the dialog handles Escape itself; panel stays open beneath
-    if (!panel.hidden) closePanel(true);
+    if (!panel.hidden) { closePanel(true); return; }
+    if (columnsEl.dataset.maximized) setMaximized(null);
   });
 
   async function init() {

@@ -25,7 +25,7 @@ The first version is a side-by-side lab for one question: *how should an assista
 * **RAG** retrieves the most relevant chunks with local embeddings and full-text search, then answers from them.
 * **Agentic** lets Claude search and read the manuals with tools until it is satisfied.
 
-Each column shows the answer, its citations, a trace of the steps taken, and the time, token and cost figures. You can judge the answers yourself: vote for the best one, optionally in **blind mode**, which hides which strategy produced which column until you have voted. The **leaderboard** page (`/leaderboard`) aggregates the votes, with filtering, export and reset.
+Each column shows the answer, its citations, a trace of the steps taken, and the time, token and cost figures. You can judge the answers yourself: vote for the best one, optionally in **blind mode**, which hides which strategy produced which column until you have voted. The ⤢ button in a column header maximizes that column (the others shrink to clickable strips); ⤡, `Esc` or clicking its title restores equal widths. The **leaderboard** page (`/leaderboard`) aggregates the votes, with filtering, export and reset.
 
 What you can learn from it: where each strategy is accurate, fast and cheap, where it misses content or gets expensive, and how each one handles questions the manuals do not cover or answer inconsistently. The sample corpus contains a deliberate contradiction (the thermostat factory-reset hold time) so you can see which strategies notice it.
 
