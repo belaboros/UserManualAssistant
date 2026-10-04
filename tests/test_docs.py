@@ -35,3 +35,33 @@ def test_overview_links_every_adr():
     text = (ROOT / "docs" / "architecture" / "overview.md").read_text()
     for adr in (ROOT / "docs" / "adr").glob("[0-9][0-9][0-9][0-9]-*.md"):
         assert f"../adr/{adr.name}" in text, f"overview does not link {adr.name}"
+
+
+STRATEGY_DOCS = [("whole_context", "1-whole-context.md"), ("rag", "2-rag.md"), ("agentic", "3-agentic.md")]
+
+EXPLAINER_HEADINGS = [
+    "## In one paragraph",
+    "## Diagrams",
+    "## Step by step",
+    "## Prefer when",
+    "## Avoid when",
+    "## Cost and latency",
+    "## Typical failure modes",
+    "## What to look for in the demo",
+]
+
+
+def test_strategy_docs_embed_current_diagrams():
+    for sid, doc in STRATEGY_DOCS:
+        text = (ROOT / "docs" / "strategies" / doc).read_text()
+        for kind in ("flow", "sequence"):
+            src = (STATIC / "diagrams" / f"{sid}-{kind}.mmd").read_text().strip()
+            assert f"```mermaid\n{src}\n```" in text, f"{doc} does not embed {sid}-{kind}.mmd"
+
+
+def test_strategy_docs_use_the_fixed_headings_in_order():
+    # Stable anchors: the app links to #avoid-when when the corpus is too large.
+    for _, doc in STRATEGY_DOCS:
+        lines = (ROOT / "docs" / "strategies" / doc).read_text().splitlines()
+        h2 = [line.rstrip() for line in lines if line.startswith("## ")]
+        assert h2 == EXPLAINER_HEADINGS, doc
