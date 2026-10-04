@@ -23,7 +23,7 @@ def parse_markdown(
     doc_stem = PurePosixPath(doc_path).stem
     anchors = UniqueAnchors()
 
-    # (level, title, anchor, body_start_line) per heading
+    # (level, title, anchor, heading_start_line, body_start_line) per heading
     headings: list[tuple[int, str, str, int, int]] = []
     for i, tok in enumerate(tokens):
         if tok.type == "heading_open":
