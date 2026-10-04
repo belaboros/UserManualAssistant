@@ -6,6 +6,7 @@ import asyncio
 import copy
 import os
 import subprocess
+import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Protocol
@@ -186,3 +187,10 @@ def text_response(text: str, citations: list[dict] | None = None, usage: Usage |
     if citations is not None:
         block["citations"] = citations
     return LLMResponse([block], "end_turn", usage if usage is not None else Usage(10, 5))
+
+
+def tool_use_response(
+    name: str, input: dict, id: str | None = None, usage: Usage | None = None
+) -> LLMResponse:
+    block = {"type": "tool_use", "id": id or f"toolu_{uuid.uuid4().hex[:16]}", "name": name, "input": input}
+    return LLMResponse([block], "tool_use", usage if usage is not None else Usage(10, 5))
