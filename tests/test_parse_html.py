@@ -47,3 +47,26 @@ def test_nested_blocks_not_duplicated_and_source_url():
                    manual_id="m", doc_path="a.html", base_url="https://x.io/docs/")
     assert s[0].text == "One"
     assert s[0].source_url == "https://x.io/docs/a.html#a"
+
+
+def test_duplicate_heading_ids_stay_unique():
+    s = parse_html('<body><h1 id="x">A</h1><p>a</p><h1 id="x">B</h1><p>b</p></body>',
+                   manual_id="m", doc_path="a.html", base_url=None)
+    assert [x.anchor for x in s] == ["x", "x-1"]
+    assert len({x.id for x in s}) == 2
+
+
+def test_explicit_id_colliding_with_earlier_slug_stays_unique():
+    s = parse_html('<body><h1>Confirm</h1><p>a</p><h1 id="confirm">Other</h1><p>b</p></body>',
+                   manual_id="m", doc_path="a.html", base_url=None)
+    assert s[0].anchor == "confirm" and s[1].anchor != "confirm"
+    assert len({x.id for x in s}) == 2
+
+
+def test_container_own_text_kept_with_nested_blocks():
+    s = parse_html("<body><h1>A</h1><ul><li>Step one<ul><li>sub</li></ul></li></ul>"
+                   "<blockquote>Note<p>x</p></blockquote></body>",
+                   manual_id="m", doc_path="a.html", base_url=None)
+    t = s[0].text
+    assert t.count("Step one") == 1 and t.count("sub") == 1
+    assert t.count("Note") == 1 and t.count("x") == 1

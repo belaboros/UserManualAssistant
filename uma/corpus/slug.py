@@ -14,14 +14,13 @@ class UniqueAnchors:
     def __init__(self) -> None:
         self._seen: set[str] = set()
 
-    def register(self, anchor: str) -> None:
-        """Reserve an anchor that already exists in the source document."""
-        if anchor:
-            self._seen.add(anchor)
-
     def make(self, heading: str) -> str:
         # An empty slug is reserved for the intro section, so fall back to "section".
-        base = slugify(heading) or "section"
+        return self.claim(slugify(heading) or "section")
+
+    def claim(self, preferred: str) -> str:
+        """Reserve `preferred`, or the first free `preferred-N` if it is taken."""
+        base = preferred
         slug, n = base, 0
         while slug in self._seen:
             n += 1

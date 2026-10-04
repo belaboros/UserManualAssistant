@@ -9,10 +9,49 @@ _BLOCKS = {"p", "li", "pre", "td", "th", "dt", "dd", "blockquote"}
 _BLOCK_SELECTOR = ", ".join(sorted(_BLOCKS))
 
 
-def _block_text(node: LexborNode) -> str:
+def _has_blocks(node: LexborNode) -> bool:
+    return any(n.mem_id != node.mem_id for n in node.css(_BLOCK_SELECTOR))
+
+
+def _inside_block(node: LexborNode) -> bool:
+    parent = node.parent
+    while parent is not None:
+        if parent.tag in _BLOCKS:
+            return True
+        parent = parent.parent
+    return False
+
+
+def _block_lines(node: LexborNode) -> list[str]:
+    """One line per block: a container's own text, then its nested blocks' lines."""
     if node.tag == "pre":
-        return (node.text() or "").strip()
-    return " ".join((node.text(separator=" ") or "").split())
+        text = (node.text() or "").strip()
+        return [text] if text else []
+    lines: list[str] = []
+    buf: list[str] = []
+
+    def flush() -> None:
+        line = " ".join(" ".join(buf).split())
+        if line:
+            lines.append(line)
+        buf.clear()
+
+    def walk(parent: LexborNode) -> None:
+        for child in parent.iter(include_text=True):
+            if child.tag == "-text":
+                buf.append(child.text() or "")
+            elif child.tag in _BLOCKS:
+                flush()
+                lines.extend(_block_lines(child))
+            elif _has_blocks(child):
+                flush()
+                walk(child)
+            else:
+                buf.append(child.text(separator=" ") or "")
+
+    walk(node)
+    flush()
+    return lines
 
 
 def parse_html(
@@ -44,15 +83,12 @@ def parse_html(
             title = " ".join((node.text(separator=" ") or "").split())
             existing = node.attributes.get("id")
             if existing:
-                anchors.register(existing)
-                anchor = existing
+                anchor = anchors.claim(existing)
             else:
                 anchor = anchors.make(title)
             blocks.append([int(tag[1:]), title, anchor, []])
-        elif tag in _BLOCKS and len(node.css(_BLOCK_SELECTOR)) == 1:
-            line = _block_text(node)
-            if line:
-                blocks[-1][3].append(line)
+        elif tag in _BLOCKS and not _inside_block(node):
+            blocks[-1][3].extend(_block_lines(node))
 
     sections: list[Section] = []
     position = start_position
