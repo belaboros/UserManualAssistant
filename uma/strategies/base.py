@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import re
+import time
 from collections.abc import AsyncIterator, Callable
 from dataclasses import asdict, dataclass, field
 from typing import Literal, Protocol
 
-from uma.llm import Usage
+from uma.config import cost_usd
+from uma.llm import LLM, Completed, LLMError, TextChunk, Usage
 
 Status = Literal["answered", "not_covered", "contradiction_found"]
 _STATUSES: tuple[str, ...] = ("answered", "not_covered", "contradiction_found")
@@ -185,3 +187,47 @@ def answer_to_dict(answer: Answer) -> dict:
     for c in d["citations"]:
         c["heading_path"] = list(c["heading_path"])
     return d
+
+
+async def run_single_call(
+    llm: LLM,
+    system: str,
+    messages: list[dict],
+    resolve: Callable[[dict], Citation | None],
+    started: float,
+    model: str,
+) -> AsyncIterator[AnswerEvent]:
+    """One streamed LLM call -> TextDelta* then Final (or Failed).
+
+    `started` is a time.perf_counter() value taken by the caller (latency base);
+    `model` selects the price for Metrics.cost_usd; `resolve` maps a raw citation
+    dict to a Citation, or None if it cannot (see assemble_cited_text).
+    The status tag is hidden from streamed text and parsed from the assembled text.
+    LLMError is converted to Failed(str(e)); stop_reason "refusal" to Failed.
+    """
+    filt = StatusTagFilter()
+    try:
+        async for event in llm.stream(system=system, messages=messages):
+            if isinstance(event, TextChunk):
+                shown = filt.feed(event.text)
+                if shown:
+                    yield TextDelta(shown)
+            elif isinstance(event, Completed):
+                response = event.response
+                if response.stop_reason == "refusal":
+                    yield Failed("The model declined this question")
+                    return
+                raw, citations = assemble_cited_text(response.content, resolve)
+                text, status, _ = strip_status(raw)
+                u = response.usage
+                metrics = Metrics(
+                    latency_ms=round((time.perf_counter() - started) * 1000),
+                    usage=u,
+                    cost_usd=cost_usd(model, u.input_tokens, u.output_tokens,
+                                      u.cache_read_tokens, u.cache_write_tokens),
+                    manuals_used=list(dict.fromkeys(c.manual_title for c in citations)),
+                )
+                yield Final(Answer(text, citations, status, metrics))
+                return
+    except LLMError as e:
+        yield Failed(str(e))

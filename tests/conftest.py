@@ -1,5 +1,8 @@
+from pathlib import Path
+
 import pytest
 
+from uma.corpus.ingest import ingest
 from uma.corpus.store import CorpusStore
 from uma.embedding import HashingEmbedder
 
@@ -12,6 +15,14 @@ def tmp_store(tmp_path):
 @pytest.fixture
 def embedder():
     return HashingEmbedder()
+
+
+@pytest.fixture
+def sample_store(tmp_path, embedder):
+    """Sample manuals ingested; manuals ordered by id: nimbus-app, nimbus-hub, nimbus-thermostat."""
+    store = CorpusStore(tmp_path / "sample" / "uma.db")
+    ingest(Path(__file__).resolve().parent.parent / "sample_manuals", store, embedder)
+    return store
 
 
 @pytest.fixture
