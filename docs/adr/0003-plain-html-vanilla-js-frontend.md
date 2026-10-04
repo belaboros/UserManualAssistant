@@ -44,6 +44,9 @@ from a CDN:
 - **marked** turns the Markdown answers into HTML;
 - **DOMPurify** sanitises that HTML before it's inserted into the page.
 
+Each CDN script is pinned to an exact version and loaded with a Subresource Integrity hash
+(`integrity="sha384-…"`, `crossorigin="anonymous"`), so a changed or compromised file is refused.
+
 ## Consequences
 
 - No frontend build or install. Editing a file and refreshing the browser is the whole workflow.

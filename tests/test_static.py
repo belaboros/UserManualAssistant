@@ -45,3 +45,15 @@ def test_leaderboard_page_has_required_elements(tmp_path):
     assert client.get("/static/leaderboard.js").status_code == 200
     # The ask page links to the leaderboard too.
     assert 'href="/leaderboard"' in client.get("/").text
+
+
+def test_cdn_scripts_are_pinned_with_sri(tmp_path):
+    client, _ = make_client(tmp_path)
+    for page in ("/", "/leaderboard"):
+        html = client.get(page).text
+        for tag in re.findall(r"<script[^>]*\bsrc=\"https?://[^>]*>", html):
+            src = re.search(r'src="([^"]+)"', tag).group(1)
+            assert re.search(r"@\d+\.\d+\.\d+/", src), f"not pinned to an exact version: {src}"
+            assert re.search(r'integrity="sha384-[A-Za-z0-9+/=]{64}"', tag), f"no SRI: {src}"
+            assert 'crossorigin="anonymous"' in tag, src
+    assert "marked@12.0.2/marked.min.js" in client.get("/").text
