@@ -1,0 +1,20 @@
+sequenceDiagram
+    participant UI as Web UI
+    participant R as FastAPI runner
+    participant S as BaselineStrategy
+    participant C as Claude API
+    participant DB as SQLite
+    UI->>R: GET stream for question
+    R->>S: answer(question)
+    Note over S,DB: no corpus read, no search, no tools
+    S->>C: stream(BASELINE_RULES, question only)
+    loop streamed text
+        C-->>S: text delta
+        S-->>R: TextDelta without status tag
+        R-->>UI: SSE delta
+    end
+    C-->>S: final text, usage
+    S->>S: strip status tag, no citations to resolve
+    S-->>R: Final answer, metrics
+    R-->>UI: SSE final
+    R->>DB: save answer to log

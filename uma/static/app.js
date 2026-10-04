@@ -1,7 +1,10 @@
 "use strict";
 (function () {
   const MODE_KEY = "uma-mode";
-  const BLIND_LABELS = ["Answer X", "Answer Y", "Answer Z"];
+  // Blind labels end at Z: three columns are X/Y/Z, four are W/X/Y/Z.
+  function blindLabel(i, n) {
+    return "Answer " + String.fromCharCode("Z".charCodeAt(0) - (n - 1) + i);
+  }
   const STATUS_TEXT = {
     answered: "✓ answered",
     not_covered: "not covered",
@@ -117,7 +120,7 @@
     order.forEach((id, i) => {
       const col = columns[id];
       columnsEl.append(col); // moves the node into its new position
-      col.dataset.label = BLIND_LABELS[i];
+      col.dataset.label = blindLabel(i, order.length);
       const hidden = blind && !(state.question && state.question.revealed.has(id));
       $(".column-title", col).textContent = hidden ? col.dataset.label : titleOf(id);
       show($(".reveal", col), hidden && !!state.question);

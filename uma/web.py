@@ -23,11 +23,13 @@ from uma.llm import LLM, AnthropicLLM
 from uma.log import Log, VoteError
 from uma.runner import run_question
 from uma.strategies.agentic import AgenticStrategy
+from uma.strategies.baseline import BaselineStrategy
 from uma.strategies.rag import RagStrategy
 from uma.strategies.whole_context import WholeContextStrategy
 
-STRATEGY_ORDER = ["whole_context", "rag", "agentic"]
+STRATEGY_ORDER = ["baseline", "whole_context", "rag", "agentic"]
 _DOCS = {
+    "baseline": "/docs/strategies/0-baseline.md",
     "whole_context": "/docs/strategies/1-whole-context.md",
     "rag": "/docs/strategies/2-rag.md",
     "agentic": "/docs/strategies/3-agentic.md",
@@ -86,6 +88,7 @@ def create_app(
     strategies = {
         s.id: s
         for s in (
+            BaselineStrategy(llm, settings),
             WholeContextStrategy(store, llm, settings),
             RagStrategy(store, embedder, llm, settings),
             AgenticStrategy(store, embedder, llm, settings),

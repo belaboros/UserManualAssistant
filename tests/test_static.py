@@ -5,7 +5,7 @@ from tests.test_web import make_client
 REQUIRED = [
     'id="question-form"', 'id="question-input"', 'id="mode-toggle"', 'id="columns"',
     'id="corpus-warning"',
-    'data-strategy="whole_context"', 'data-strategy="rag"', 'data-strategy="agentic"',
+    'data-strategy="baseline"', 'data-strategy="whole_context"', 'data-strategy="rag"', 'data-strategy="agentic"',
     'class="column"', 'class="answer"', 'class="status-badge"', 'class="metrics"',
     'class="trace"', 'class="how-it-works"', 'class="stars"', 'data-stars="1"',
     'data-stars="5"', 'class="reveal"', "<dialog", 'src="/static/app.js"',
@@ -18,8 +18,12 @@ def test_index_has_required_elements(tmp_path):
     assert r.status_code == 200
     for needle in REQUIRED:
         assert needle in r.text, needle
-    assert r.text.count('class="column"') == 3
-    assert r.text.count('data-stars="') == 15
+    assert r.text.count('class="column"') == 4
+    assert r.text.count('data-stars="') == 20
+    # The baseline column comes first (leftmost).
+    order = re.findall(r'<section class="column" data-strategy="([a-z_]+)"', r.text)
+    assert order == ["baseline", "whole_context", "rag", "agentic"]
+    assert 'aria-labelledby="title-baseline"' in r.text
     # No static label may name a strategy (would leak identity in blind mode).
     for tag in re.findall(r'<section class="column"[^>]*>', r.text):
         assert "aria-label=" not in tag, tag

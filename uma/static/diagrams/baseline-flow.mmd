@@ -1,0 +1,5 @@
+flowchart LR
+    Q["Question"] -->|"question text only"| C["Claude<br/>BASELINE_RULES system prompt"]
+    DB[("SQLite corpus")] -.-x|"not read: no manuals,<br/>no search, no tools"| C
+    C -->|"answer from the model's own knowledge,<br/>status tag"| F["Status filter"]
+    F -->|"answer without citations,<br/>status"| UI["Web UI"]

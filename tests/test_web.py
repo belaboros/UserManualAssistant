@@ -13,6 +13,7 @@ from uma.corpus.ingest import ingest
 from uma.corpus.store import CorpusStore
 from uma.embedding import HashingEmbedder
 from uma.llm import AnthropicLLM, FakeLLM, text_response
+from uma.strategies.rules import BASELINE_RULES
 from uma.web import STRATEGY_ORDER, create_app
 
 SAMPLE = Path(__file__).resolve().parent.parent / "sample_manuals"
@@ -24,7 +25,7 @@ def make_client(tmp_path, *, ingest_sample=True, llm=None):
     emb = HashingEmbedder()
     if ingest_sample:
         ingest(SAMPLE, CorpusStore(settings.db_path), emb)
-    llm = llm or FakeLLM([text_response(ANSWER) for _ in range(3)])
+    llm = llm or FakeLLM([text_response(ANSWER) for _ in range(len(STRATEGY_ORDER))])
     return TestClient(create_app(settings, llm=llm, embedder=emb)), llm
 
 
@@ -46,6 +47,18 @@ def stream(client, qid):
 
 def finals(payloads):
     return {p["strategy"]: p for p in payloads if p["type"] in ("final", "failed")}
+
+
+def test_strategy_order_starts_with_baseline():
+    assert STRATEGY_ORDER == ["baseline", "whole_context", "rag", "agentic"]
+
+
+def test_baseline_request_has_no_manual_content(client_with_fake_llm):
+    client, llm = client_with_fake_llm
+    stream(client, ask(client, "What is Zigbee?"))
+    base = [c for c in llm.calls if c["system"] == BASELINE_RULES]
+    assert len(base) == 1 and base[0]["tools"] is None
+    assert base[0]["messages"] == [{"role": "user", "content": "What is Zigbee?"}]
 
 
 def test_ask_and_stream(client_with_fake_llm):
@@ -81,7 +94,7 @@ class BlockingLLM(FakeLLM):
 
 def test_concurrent_stream_returns_409_then_replays(tmp_path):
     gate = threading.Event()
-    client, llm = make_client(tmp_path, llm=BlockingLLM([text_response(ANSWER) for _ in range(3)], gate))
+    client, llm = make_client(tmp_path, llm=BlockingLLM([text_response(ANSWER) for _ in range(len(STRATEGY_ORDER))], gate))
     qid = ask(client)
     result = {}
     t = threading.Thread(target=lambda: result.setdefault("p", stream(client, qid)))
@@ -107,8 +120,8 @@ def test_partial_answers_run_only_missing_strategies(client_with_fake_llm):
     f = finals(payloads)
     assert set(f) == set(STRATEGY_ORDER) and payloads[-1] == {"type": "done"}
     assert f["rag"]["type"] == "failed" and f["rag"]["message"] == "boom"
-    assert llm.calls  # the other two strategies actually ran
-    assert len(llm.calls) == 2
+    assert llm.calls  # the other strategies actually ran
+    assert len(llm.calls) == len(STRATEGY_ORDER) - 1 == 3
     assert set(client.app.state.log.answers_for(qid)) == set(STRATEGY_ORDER)
 
 
@@ -209,9 +222,15 @@ def test_strategies_status_and_static(client_with_fake_llm):
     client, _ = client_with_fake_llm
     s = client.get("/api/strategies").json()
     assert [x["id"] for x in s] == STRATEGY_ORDER
-    assert s[1]["flow"] == "/static/diagrams/rag-flow.mmd"
-    assert s[1]["sequence"] == "/static/diagrams/rag-sequence.mmd"
-    assert s[2]["doc"] == "/docs/strategies/3-agentic.md"
+    assert s[0] == {
+        "id": "baseline", "title": "No retrieval",
+        "flow": "/static/diagrams/baseline-flow.mmd",
+        "sequence": "/static/diagrams/baseline-sequence.mmd",
+        "doc": "/docs/strategies/0-baseline.md",
+    }
+    assert s[2]["flow"] == "/static/diagrams/rag-flow.mmd"
+    assert s[2]["sequence"] == "/static/diagrams/rag-sequence.mmd"
+    assert s[3]["doc"] == "/docs/strategies/3-agentic.md"
     st = client.get("/api/status").json()
     assert st["corpus_ready"] and len(st["manuals"]) == 3 and st["model"]
     assert set(st["manuals"][0]) == {"id", "title", "sections"}
