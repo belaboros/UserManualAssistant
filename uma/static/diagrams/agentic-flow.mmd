@@ -1,0 +1,15 @@
+flowchart LR
+    Q["Question"] --> C["Claude<br/>tool-use loop"]
+    C -->|"tool_use: list_manuals"| L["list_manuals"]
+    C -->|"tool_use: search with query"| S["search"]
+    C -->|"tool_use: read_section with id"| RS["read_section"]
+    S -->|"query"| H["Hybrid search<br/>BM25 + vectors + RRF"]
+    H -->|"up to 8 hits"| S
+    L -->|"tool_result: manual list"| C
+    S -->|"tool_result: hit lines"| C
+    RS -->|"tool_result: section text"| C
+    DB[("SQLite corpus")] --- L
+    DB --- H
+    DB --- RS
+    C -->|"answer with section id markers,<br/>after at most 8 tool calls"| M["Status filter and marker resolver<br/>section id to [n]"]
+    M -->|"answer with [n] citations,<br/>status"| UI["Web UI"]

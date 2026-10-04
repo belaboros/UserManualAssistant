@@ -1,0 +1,14 @@
+flowchart LR
+    M["Manual files<br/>HTML / Markdown"] -->|"files per manual"| I["Ingestion"]
+    I -->|"sections, chunks,<br/>embeddings, FTS index"| DB[("SQLite corpus")]
+    UI["Web UI"] -->|"question"| API["FastAPI"]
+    API --> S1["Whole-context"]
+    API --> S2["RAG"]
+    API --> S3["Agentic"]
+    DB -->|"all sections"| S1
+    DB -->|"chunks via hybrid search"| S2
+    DB -->|"search and read_section"| S3
+    S1 & S2 & S3 -->|"streamed answer events"| API
+    API -->|"SSE"| UI
+    UI -->|"votes"| API
+    API --> LOG[("SQLite log<br/>questions, answers, votes")]

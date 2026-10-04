@@ -1,0 +1,8 @@
+flowchart LR
+    Q["Question"] --> P["Prompt builder"]
+    DB[("SQLite corpus")] -->|"all sections"| P
+    P -->|"all sections as one document per manual,<br/>then the question"| C["Claude<br/>cached prefix"]
+    DB -.->|"token count, measured once then stored"| G["Size check<br/>WHOLE_CONTEXT_MAX_TOKENS"]
+    G -->|"within limit"| P
+    C -->|"answer text, citations,<br/>status tag"| F["Status filter and<br/>citation resolver"]
+    F -->|"answer with [n] citations,<br/>status"| UI["Web UI"]

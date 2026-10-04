@@ -1,0 +1,32 @@
+sequenceDiagram
+    participant UI as Web UI
+    participant R as FastAPI runner
+    participant S as RagStrategy
+    participant H as Search
+    participant DB as SQLite
+    participant C as Claude API
+    UI->>R: GET stream for question
+    R->>S: answer(question)
+    S->>H: retrieve_for_rag(question, top-k)
+    H->>DB: FTS5 BM25 query, 30 candidates
+    DB-->>H: keyword-ranked chunk ids
+    H->>H: embed question locally
+    H->>DB: all chunk vectors
+    DB-->>H: embedding matrix
+    H->>H: cosine ranking, 30 candidates
+    H->>H: RRF fusion, then coverage rule
+    H-->>S: top-k chunks with scores
+    S-->>R: TraceStep retrieved, chunk list
+    R-->>UI: SSE trace
+    Note over S,C: the trace is sent before the Claude call
+    S->>C: stream(chunks as documents, question)
+    loop streamed text
+        C-->>S: text delta
+        S-->>R: TextDelta without status tag
+        R-->>UI: SSE delta
+    end
+    C-->>S: content_block_location citations, usage
+    S->>S: map document index to chunk section, strip status tag
+    S-->>R: Final answer, citations, metrics
+    R-->>UI: SSE final
+    R->>DB: save answer and trace to log

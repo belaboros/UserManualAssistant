@@ -1,0 +1,41 @@
+sequenceDiagram
+    participant UI as Web UI
+    participant R as FastAPI runner
+    participant S as AgenticStrategy
+    participant H as Search
+    participant DB as SQLite
+    participant C as Claude API
+    UI->>R: GET stream for question
+    R->>S: answer(question)
+    S->>C: stream(question, tools)
+    loop up to AGENT_MAX_TOOL_CALLS tool calls
+        C-->>S: assistant turn with tool_use blocks
+        S->>S: echo assistant turn into messages
+        alt tool budget not reached
+            alt list_manuals
+                S->>DB: manuals
+                DB-->>S: id, title, owner, section count
+            else search
+                S->>H: hybrid_search(query, k=8, manual_id)
+                H->>DB: FTS5 and vector candidates
+                DB-->>H: chunks
+                H-->>S: top hits
+            else read_section
+                S->>DB: section(section_id)
+                DB-->>S: heading path and full text
+            end
+            S-->>R: TraceStep tool_call, name, input, summary
+            R-->>UI: SSE trace
+        else budget reached
+            Note over S: remaining tool_use blocks get an is_error<br/>tool_result, plus a notice to answer now
+        end
+        S->>C: one user message with all tool_results
+    end
+    C-->>S: final text with section id markers, status tag
+    S-->>R: TextDelta without status tag
+    R-->>UI: SSE delta
+    S->>DB: look up each cited section
+    S->>S: resolve section markers to [n], strip status tag
+    S-->>R: Final answer, citations, metrics
+    R-->>UI: SSE final
+    R->>DB: save answer and trace to log
