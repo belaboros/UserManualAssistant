@@ -125,7 +125,11 @@
   async function reset() {
     if (!window.confirm("Delete all votes? This cannot be undone.")) return;
     try {
-      const r = await fetch("/api/reset-votes", { method: "POST" });
+      const r = await fetch("/api/reset-votes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: true }),
+      });
       if (!r.ok) throw new Error("reset returned " + r.status);
     } catch (e) {
       showError("Could not reset votes: " + e.message);

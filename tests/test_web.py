@@ -167,7 +167,14 @@ def test_vote_then_leaderboard(client_with_fake_llm):
     blind = client.get("/api/leaderboard?mode=blind").json()
     assert all(row["votes"] == 0 for row in blind["rows"]) and blind["recent"] == []
     assert client.get("/api/leaderboard?mode=bogus").status_code == 422
-    assert client.post("/api/reset-votes").status_code == 204
+    # No body / a form post / confirm != true must not wipe votes (cross-site form protection).
+    assert client.post("/api/reset-votes").status_code == 422
+    assert client.post("/api/reset-votes", data={"confirm": "true"}).status_code == 422
+    plain = {"Content-Type": "text/plain"}  # a cross-site fetch without CORS preflight
+    assert client.post("/api/reset-votes", content=b'{"confirm": true}', headers=plain).status_code == 422
+    assert client.post("/api/reset-votes", json={"confirm": False}).status_code == 400
+    assert sum(r["votes"] for r in client.get("/api/leaderboard").json()["rows"]) == 1
+    assert client.post("/api/reset-votes", json={"confirm": True}).status_code == 204
     assert all(r["votes"] == 0 for r in client.get("/api/leaderboard").json()["rows"])
 
 

@@ -47,6 +47,10 @@ class QuestionIn(BaseModel):
     blind: bool = False
 
 
+class ResetIn(BaseModel):
+    confirm: bool
+
+
 class VoteIn(BaseModel):
     question_id: str
     strategy: str
@@ -217,7 +221,10 @@ def create_app(
         )
 
     @app.post("/api/reset-votes", status_code=204)
-    def api_reset() -> Response:
+    def api_reset(body: ResetIn) -> Response:
+        # A JSON body is required so a plain cross-site form post cannot wipe the votes.
+        if body.confirm is not True:
+            raise HTTPException(400, 'Send {"confirm": true} to reset all votes')
         log.reset_votes()
         return Response(status_code=204)
 
