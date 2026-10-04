@@ -211,7 +211,7 @@ manuals that were actually *cited*, not all that were retrieved.
   every chunk sent to Claude, with scores. Ask yourself whether the right section is in the list.
   If it isn't, no prompt engineering could have saved the answer.
 - **The cheap lookup.** For "What does error E3 mean?" expect the E3 section near the top of the
-  trace. On a realistic corpus RAG should have the lowest cost and latency of the three columns; on
+  trace. On a realistic corpus RAG should have the lowest cost and latency of the three retrieval columns; on
 the small sample corpus a warm whole-context call can be just as cheap.
 - **Cross-manual pairing.** For "How do I pair the thermostat with the hub?" check whether all three
   manuals' pairing sections appear in the trace. The coverage rule is there to make that likely.

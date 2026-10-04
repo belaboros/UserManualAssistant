@@ -217,7 +217,7 @@ call) and is saved with the answer's metrics.
   anything new.
 - **Citation slips.** Agentic citations are plain-text markers. A mistyped or invented section id is
   dropped silently, so a claim can lose its citation. The code checks only that a cited section
-  exists, not that the model actually read it. And unlike the other two strategies, agentic
+  exists, not that the model actually read it. And unlike whole-context and RAG, agentic
   citations carry no quoted passage (`cited_text` is empty).
 - **Run-to-run variation.** The same question can produce a different trace, a different answer and
   a different cost the next time. Don't judge the strategy on a single run.

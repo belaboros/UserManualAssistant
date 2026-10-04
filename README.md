@@ -18,8 +18,9 @@ Users want quick and efficient solutions to their problem, rather than reading l
 
 ## v1: retrieval strategy comparison
 
-The first version is a side-by-side lab for one question: *how should an assistant find the right passage in a set of user manuals?* You ask a question once and three retrieval strategies answer it in parallel, each streaming into its own column, all using the same Claude model and the same answering rules:
+The first version is a side-by-side lab for one question: *how should an assistant find the right passage in a set of user manuals?* You ask a question once and four strategies answer it in parallel, each streaming into its own column, all using the same Claude model. The three retrieval strategies share the same answering rules; the fourth is a no-retrieval baseline:
 
+* **No retrieval** sends only the question, so you can see what the model knows on its own (the control group).
 * **Whole-context** puts every manual into the prompt.
 * **RAG** retrieves the most relevant chunks with local embeddings and full-text search, then answers from them.
 * **Agentic** lets Claude search and read the manuals with tools until it is satisfied.
@@ -73,7 +74,7 @@ uv run python -m uma ingest --manuals-dir PATH       # reads another directory
 ## Learn how it works
 
 * [Architecture overview](docs/architecture/overview.md)
-* The three strategy explainers: [whole-context](docs/strategies/1-whole-context.md), [RAG](docs/strategies/2-rag.md), [agentic](docs/strategies/3-agentic.md)
+* The four strategy explainers: [no retrieval](docs/strategies/0-baseline.md), [whole-context](docs/strategies/1-whole-context.md), [RAG](docs/strategies/2-rag.md), [agentic](docs/strategies/3-agentic.md)
 * [Choosing a strategy](docs/choosing-a-strategy.md)
 * [Demo questions](docs/demo-questions.md) to try in the app
 * [Architecture decision records](docs/adr/README.md)

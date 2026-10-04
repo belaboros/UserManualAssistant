@@ -18,3 +18,4 @@ when to revisit it. Read them in order for a guided tour of the design. See
 | [0010](0010-mermaid-for-diagrams.md) | Mermaid for architecture and strategy diagrams | Accepted |
 | [0011](0011-switch-default-model-to-sonnet-5-5.md) | Switch the default model to Claude Sonnet 5.5 | Accepted |
 | [0012](0012-citation-mechanism-per-strategy.md) | Citation mechanism per strategy | Accepted |
+| [0013](0013-no-retrieval-baseline-strategy.md) | A no-retrieval baseline strategy as a control group | Accepted |

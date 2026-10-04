@@ -18,6 +18,11 @@ def test_overview_embeds_diagram():
     assert f"```mermaid\n{src}\n```" in text
 
 
+def test_overview_diagram_shows_baseline():
+    src = (STATIC / "diagrams" / "overview.mmd").read_text()
+    assert 'S0["No retrieval"]' in src and "S0 & S1 & S2 & S3" in src
+
+
 def test_every_api_diagram_exists(tmp_path):
     settings = Settings(db_path=tmp_path / "uma.db")
     client = TestClient(create_app(settings, llm=FakeLLM([]), embedder=object()))
@@ -37,7 +42,12 @@ def test_overview_links_every_adr():
         assert f"../adr/{adr.name}" in text, f"overview does not link {adr.name}"
 
 
-STRATEGY_DOCS = [("whole_context", "1-whole-context.md"), ("rag", "2-rag.md"), ("agentic", "3-agentic.md")]
+STRATEGY_DOCS = [
+    ("baseline", "0-baseline.md"),
+    ("whole_context", "1-whole-context.md"),
+    ("rag", "2-rag.md"),
+    ("agentic", "3-agentic.md"),
+]
 
 EXPLAINER_HEADINGS = [
     "## In one paragraph",

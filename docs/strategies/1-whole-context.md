@@ -1,8 +1,9 @@
 # Strategy 1: Whole-context
 
-Whole-context is the simplest of the three strategies: no search, no tools. Every section of every
-manual goes into the prompt, and Claude reads all of it before answering. It's the baseline the
-other two strategies are measured against. See the [architecture overview](../architecture/overview.md)
+Whole-context is the simplest of the three retrieval strategies: no search, no tools. Every section
+of every manual goes into the prompt, and Claude reads all of it before answering. It's the
+reference point for the other two retrieval strategies, while the
+[no-retrieval baseline](0-baseline.md) shows what the model knows without any manual at all. See the [architecture overview](../architecture/overview.md)
 for how it fits into the app, and [choosing a strategy](../choosing-a-strategy.md) for a side-by-side
 comparison.
 
@@ -98,7 +99,7 @@ sequenceDiagram
    `WHOLE_CONTEXT_MAX_TOKENS` (800,000 by default, set in [`Settings`](../../uma/config.py)) it
    stops with a `Failed` event whose hint links to the [Avoid when](#avoid-when) section below.
 4. **Write the system prompt.** The shared [`ANSWERING_RULES`](../../uma/strategies/rules.py)
-   (the same for all three strategies, see [ADR 0006](../adr/0006-same-model-and-rules-for-all-strategies.md))
+   (the same for all three retrieval strategies, see [ADR 0006](../adr/0006-same-model-and-rules-for-all-strategies.md))
    plus one line describing the mechanism: "The complete manuals are provided as documents. Read
    them in full before answering."
 5. **Call Claude once, streaming.** [`run_single_call`](../../uma/strategies/base.py) sends the
