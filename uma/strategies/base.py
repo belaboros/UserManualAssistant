@@ -7,10 +7,13 @@ import re
 import time
 from collections.abc import AsyncIterator, Callable
 from dataclasses import asdict, dataclass, field
-from typing import Literal, Protocol
+from typing import TYPE_CHECKING, Literal, Protocol
 
 from uma.config import cost_usd
 from uma.llm import LLM, Completed, LLMError, TextChunk, Usage
+
+if TYPE_CHECKING:
+    from uma.strategies.web_sources import WebSources
 
 logger = logging.getLogger(__name__)
 
@@ -194,6 +197,25 @@ def resolve_section_markers(
         return "" if citation is None else f"[{_index_of(citation, cits)}]"
 
     return _MARKER.sub(repl, text), cits
+
+
+_MIXED_MARKER = re.compile(r"\[(?:§([^\]]+)|web:(\d+))\]")
+
+
+def resolve_mixed_markers(
+    text: str, lookup: Callable[[str], Citation | None], sources: WebSources
+) -> tuple[str, list[Citation]]:
+    """One pass over [§id] and [web:n] markers, numbered together; unknown ones are removed."""
+    cits: list[Citation] = []
+
+    def repl(m: re.Match[str]) -> str:
+        if m.group(1) is not None:
+            citation = lookup(m.group(1))
+        else:
+            citation = sources.citation(int(m.group(2)))
+        return "" if citation is None else f"[{_index_of(citation, cits)}]"
+
+    return _MIXED_MARKER.sub(repl, text), cits
 
 
 def answer_to_dict(answer: Answer) -> dict:
