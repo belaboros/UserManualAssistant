@@ -120,6 +120,12 @@ def test_merge_rules_quote_spec():
     assert "[web:<url>]" in AGENTIC_WEB_SEARCH and "[§<section_id>]" in AGENTIC_WEB_LOCAL
 
 
+def test_merge_rules_cover_degraded_sources():
+    assert "web search was unavailable" in AGENTIC_WEB_MERGE_RULES
+    assert "the manuals could not be checked against the web" in AGENTIC_WEB_MERGE_RULES
+    assert "the answer comes only from the web because the manuals do not cover it" in AGENTIC_WEB_MERGE_RULES
+
+
 def test_timeout_from_settings(sample_store, embedder):
     s = AgenticWebStrategy(sample_store, embedder, FakeLLM([]), Settings(agent_web_timeout_s=42.0))
     assert s.timeout_s == 42.0 and s.id == "agentic_web" and s.title == "Agentic & web"
