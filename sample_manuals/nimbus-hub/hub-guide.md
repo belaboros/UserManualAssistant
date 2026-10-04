@@ -27,14 +27,14 @@ The Nimbus Hub connects your Nimbus devices to each other and to the Nimbus app.
 | Red, solid | Hardware fault |
 | Purple, blinking | Installing firmware |
 
+
 ## Pairing devices
 
-Use pairing mode to add a Nimbus device, such as a thermostat, to the hub.
+Use pairing mode to add a Nimbus device to the hub.
 
 1. Press and hold the Link button on top of the hub for 3 seconds. The LED blinks blue. The hub stays in pairing mode for two minutes.
-2. Start pairing on the device. For the Nimbus Thermostat, choose Menu > Settings > Connect > Hub on the thermostat.
-3. Confirm the 6-digit code in the Nimbus app.
-4. When the LED returns to solid green, the device is paired.
+2. Start pairing on the device, then confirm the pairing in the Nimbus app. See the manuals of the device and the app for those steps.
+3. When the LED returns to solid green, the device is paired.
 
 A hub can pair with up to 50 devices. To pair a second device, press the Link button again.
 
@@ -54,7 +54,7 @@ By default the hub receives its address from your router through DHCP. You can s
 
 Each Nimbus device that is connected to mains power repeats the mesh signal. Battery devices do not repeat it. In an average home one hub covers about 100 square meters. Add a mains-powered device between the hub and a far-away device to extend the range.
 
-## Reset
+### Reset
 
 A network reset removes the hub's Wi-Fi settings and fixed IP address. Paired devices and the hub's name are kept.
 
@@ -66,13 +66,19 @@ If you cannot reach the hub in the app, hold the Link button for 10 seconds. Thi
 
 ## Hardware
 
-This part of the guide covers the physical hub: its buttons, its firmware and how to restore it to factory state. The Link button is on top of the hub. The Reset button is a small recessed button on the bottom.
+### Buttons and ports
 
-## Firmware
+- **Link button** on top of the hub: starts pairing mode and, held for 10 seconds, resets the network settings.
+- **Reset button** on the bottom, recessed: restores factory state.
+- **Ethernet port** on the back: connects the hub to your router.
+- **USB-C port** on the back: power input only. It does not carry data.
+- **Status LED** on the front: shows the state of the hub, see the LED status table.
+
+### Firmware
 
 The hub installs firmware updates automatically at night between 02:00 and 04:00. The LED blinks purple during the installation. Do not disconnect the power. To update at a different time, open the app and choose Hub settings > Firmware > Update now.
 
-## Reset
+### Reset
 
 A hardware reset returns the hub to its factory state. It removes all paired devices, the Wi-Fi settings and the hub's name. Use it when you give the hub to someone else.
 
@@ -90,5 +96,6 @@ After a hardware reset you must pair all devices again.
 | Power | 5 V DC, USB-C, 1 A |
 | Network | Ethernet 10/100, Wi-Fi 2.4 and 5 GHz |
 | Mesh radio | 868 MHz |
+| Bluetooth | Bluetooth LE, used by the app for setup |
 | Maximum devices | 50 |
 | Operating temperature | 0 C to 40 C |

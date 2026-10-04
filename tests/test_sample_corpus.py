@@ -25,6 +25,16 @@ def test_sample_corpus_planted_cases(tmp_store, embedder):
     assert "nimbus-hub:hub-guide:reset" in text
     assert "nimbus-hub:hub-guide:reset-1" in text
 
+    by_id = {s.id: s for s in sections}
+    assert by_id["nimbus-hub:hub-guide:reset"].heading_path == ("Nimbus Hub", "Network", "Reset")
+    assert by_id["nimbus-hub:hub-guide:reset-1"].heading_path == ("Nimbus Hub", "Hardware", "Reset")
+
+    # overlap: each manual holds only its own part of the pairing steps
+    assert not any("Connect > Hub" in s.text for s in sections if s.manual_id == "nimbus-hub")
+    assert not any("6-digit" in s.text for s in sections if s.manual_id == "nimbus-hub")
+    assert not any("Link button" in s.text and "3 seconds" in s.text
+                   for s in sections if s.manual_id != "nimbus-hub")
+
     # overlap sections exist
     for sid in (
         "nimbus-thermostat:settings:connect-to-a-hub",
@@ -42,3 +52,4 @@ def test_sample_corpus_planted_cases(tmp_store, embedder):
     # html boilerplate stripped
     assert not any("©" in t for t in text.values())
     assert not any("Skip to content" in t for t in text.values())
+    assert not any("Contact us" in t or "Nimbus Help Center" in t for t in text.values())
