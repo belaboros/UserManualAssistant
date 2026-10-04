@@ -151,3 +151,21 @@ async def test_missing_status_tag_logs_warning(sample_store, embedder, caplog):
     assert events[-1].answer.status == "answered"
     warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
     assert len(warnings) == 1 and "agentic" in warnings[0].getMessage()
+
+
+async def test_tools_run_off_the_event_loop_thread(sample_store, embedder, monkeypatch):
+    import threading
+
+    threads = []
+    original = AgenticStrategy._run_tool
+
+    def spy(self, name, tool_input):
+        threads.append(threading.current_thread())
+        return original(self, name, tool_input)
+
+    monkeypatch.setattr(AgenticStrategy, "_run_tool", spy)
+    llm = FakeLLM([tool_use_response("search", {"query": "pair hub", "manual_id": None}),
+                   text_response("ok\n<status>answered</status>")])
+    events = await _run(sample_store, embedder, llm)
+    assert isinstance(events[-1], Final)
+    assert threads and all(t is not threading.main_thread() for t in threads)

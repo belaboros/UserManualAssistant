@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from collections.abc import AsyncIterator
@@ -189,7 +190,8 @@ class AgenticStrategy:
                 else:
                     name, tool_input = block.get("name"), block.get("input")
                     try:
-                        output = self._run_tool(name, tool_input)
+                        # Synchronous search/store work: off the event loop (see rag.py).
+                        output = await asyncio.to_thread(self._run_tool, name, tool_input)
                         result["content"] = output
                         summary = output.splitlines()[0] if output else ""
                     except _ToolError as e:

@@ -28,9 +28,10 @@ def _vector_ranking(
     if not np.any(q):
         return []
     order = np.argsort(-(matrix @ q), kind="stable")
+    allowed = None if manual_id is None else store.chunk_ids_for_manual(manual_id)
     out: list[str] = []
     for i in order:
-        if manual_id is not None and store.chunk(ids[i]).manual_id != manual_id:
+        if allowed is not None and ids[i] not in allowed:
             continue
         out.append(ids[i])
         if len(out) >= candidates:

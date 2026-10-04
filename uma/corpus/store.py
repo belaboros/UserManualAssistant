@@ -124,6 +124,9 @@ class CorpusStore:
         r = rows[0]
         return Chunk(r["id"], r["section_id"], r["manual_id"], r["text"], r["position"])
 
+    def chunk_ids_for_manual(self, manual_id: str) -> set[str]:
+        return {r["id"] for r in self._run("SELECT id FROM chunks WHERE manual_id=?", (manual_id,))}
+
     def chunk_matrix(self) -> tuple[list[str], np.ndarray]:
         rows = self._run("SELECT id, embedding FROM chunks ORDER BY manual_id, section_id, position")
         ids = [r["id"] for r in rows]

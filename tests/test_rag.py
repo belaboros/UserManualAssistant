@@ -74,3 +74,22 @@ async def test_out_of_range_citation_dropped(sample_store, embedder):
     llm = FakeLLM([text_response("Hi.", citations=[_cit(99), {"type": "char_location"}])])
     events = await _run(sample_store, embedder, llm)
     assert isinstance(events[-1], Final) and events[-1].answer.citations == []
+
+
+async def test_retrieval_runs_off_the_event_loop_thread(sample_store, embedder, monkeypatch):
+    import threading
+
+    import uma.strategies.rag as rag_mod
+
+    threads = []
+    original = rag_mod.retrieve_for_rag
+
+    def spy(*args, **kwargs):
+        threads.append(threading.current_thread())
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(rag_mod, "retrieve_for_rag", spy)
+    llm = FakeLLM([text_response("ok\n<status>answered</status>")])
+    events = [e async for e in RagStrategy(sample_store, embedder, llm, load_settings({})).answer("pair?")]
+    assert events[-1].answer.status == "answered"
+    assert len(threads) == 1 and threads[0] is not threading.main_thread()

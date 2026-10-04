@@ -89,3 +89,23 @@ def test_retrieve_for_rag_applies_coverage(tmp_store):
     emb = StubEmbedder({"zebra": [0, 0, 1, 0]})
     out = retrieve_for_rag(tmp_store, emb, "zebra", k=1)
     assert out[0].chunk.id == "alpha-c0"
+
+
+def test_chunk_ids_for_manual(tmp_store):
+    _corpus(tmp_store)
+    assert tmp_store.chunk_ids_for_manual("alpha") == {"alpha-c0", "alpha-c1"}
+    assert tmp_store.chunk_ids_for_manual("nope") == set()
+
+
+def test_vector_ranking_with_manual_filter_does_not_fetch_chunks_one_by_one(tmp_store, monkeypatch):
+    from uma.search import _vector_ranking
+
+    _corpus(tmp_store)
+
+    def no_chunk(_cid):
+        raise AssertionError("store.chunk called per candidate")
+
+    monkeypatch.setattr(tmp_store, "chunk", no_chunk)
+    emb = StubEmbedder({"q": [1, 0, 0, 0]})
+    assert _vector_ranking(tmp_store, emb, "q", 30, "alpha") == ["alpha-c0", "alpha-c1"]
+    assert _vector_ranking(tmp_store, emb, "q", 1, "beta") == ["beta-c0"]

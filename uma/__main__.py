@@ -47,7 +47,11 @@ def main(argv: list[str] | None = None) -> int:
 
     from uma.web import create_app
 
-    uvicorn.run(create_app(settings), host=args.host, port=args.port)
+    embedder = make_embedder()
+    # Warm up here, not in create_app: tests build apps without downloading the model.
+    print("Loading embedding model…", flush=True)
+    embedder.embed(["warm-up"])
+    uvicorn.run(create_app(settings, embedder=embedder), host=args.host, port=args.port)
     return 0
 
 

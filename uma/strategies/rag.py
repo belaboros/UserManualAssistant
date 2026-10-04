@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 from collections.abc import AsyncIterator
 
@@ -25,8 +26,13 @@ class RagStrategy:
 
     async def answer(self, question: str) -> AsyncIterator[AnswerEvent]:
         started = time.perf_counter()
-        hits = retrieve_for_rag(self.store, self.embedder, question, self.settings.rag_top_k)
-        titles = {m.meta.id: m.meta.title for m in self.store.manuals()}
+        # Search and embedding are synchronous; run them off the event loop so the other
+        # strategies' streams keep flowing.
+        hits = await asyncio.to_thread(
+            retrieve_for_rag, self.store, self.embedder, question, self.settings.rag_top_k
+        )
+        manuals = await asyncio.to_thread(self.store.manuals)
+        titles = {m.meta.id: m.meta.title for m in manuals}
 
         def title_of(h: SearchHit) -> str:
             return titles.get(h.chunk.manual_id, h.chunk.manual_id)

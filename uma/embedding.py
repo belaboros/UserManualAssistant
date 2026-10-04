@@ -2,6 +2,7 @@
 
 import hashlib
 import re
+import threading
 from typing import Protocol
 
 import numpy as np
@@ -25,12 +26,15 @@ class FastEmbedEmbedder:
         self.model_name = model_name
         self.dim = dim
         self._model = None
+        self._lock = threading.Lock()  # embed() may run in worker threads
 
     def embed(self, texts: list[str]) -> np.ndarray:
         if self._model is None:
-            from fastembed import TextEmbedding  # lazy: loading downloads the model
+            with self._lock:
+                if self._model is None:
+                    from fastembed import TextEmbedding  # lazy: loading downloads the model
 
-            self._model = TextEmbedding(model_name=self.model_name)
+                    self._model = TextEmbedding(model_name=self.model_name)
         if not texts:
             return np.zeros((0, self.dim), dtype=np.float32)
         return _normalise(np.array(list(self._model.embed(texts))))
