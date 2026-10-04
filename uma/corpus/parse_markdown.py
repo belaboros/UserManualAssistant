@@ -1,9 +1,7 @@
-from pathlib import PurePosixPath
-
 from markdown_it import MarkdownIt
 
 from uma.corpus.models import Section
-from uma.corpus.slug import UniqueAnchors
+from uma.corpus.slug import UniqueAnchors, section_id, source_url
 
 
 def parse_markdown(
@@ -20,7 +18,6 @@ def parse_markdown(
     """
     lines = text.splitlines()
     tokens = MarkdownIt("commonmark").parse(text)
-    doc_stem = PurePosixPath(doc_path).stem
     anchors = UniqueAnchors()
 
     # (level, title, anchor, heading_start_line, body_start_line) per heading
@@ -38,15 +35,11 @@ def parse_markdown(
         body = "\n".join(lines[start:end]).strip()
         if not body:
             return
-        url = None
-        if base_url:
-            url = f"{base_url.rstrip('/')}/{doc_path}"
-            if anchor:
-                url += f"#{anchor}"
         sections.append(Section(
-            id=f"{manual_id}:{doc_stem}:{anchor or 'intro'}",
+            id=section_id(manual_id, doc_path, anchor),
             manual_id=manual_id, doc_path=doc_path, heading_path=path,
-            anchor=anchor, text=body, position=position, source_url=url,
+            anchor=anchor, text=body, position=position,
+            source_url=source_url(base_url, doc_path, anchor),
         ))
         position += 1
 

@@ -35,3 +35,16 @@ def test_source_url():
 def test_lists_and_code_kept_as_text():
     s = parse_markdown("# A\n- one\n- two\n\n```\ncode\n```", manual_id="m", doc_path="a.md", base_url=None)
     assert "one" in s[0].text and "code" in s[0].text
+
+
+def test_empty_slug_heading_gets_fallback_anchor():
+    s = parse_markdown("Intro.\n\n# ???\nBody.", manual_id="m", doc_path="a.md", base_url=None)
+    assert [x.anchor for x in s] == ["", "section"]
+    assert len({x.id for x in s}) == len(s)
+
+
+def test_same_stem_in_different_folders_gives_distinct_ids():
+    md = "# Setup\nBody."
+    a = parse_markdown(md, manual_id="m", doc_path="a/index.md", base_url=None)
+    b = parse_markdown(md, manual_id="m", doc_path="b/index.md", base_url=None)
+    assert a[0].id == "m:a/index:setup" and a[0].id != b[0].id
