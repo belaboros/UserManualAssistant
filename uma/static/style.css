@@ -43,6 +43,7 @@ main { max-width: 1400px; margin: 0 auto; padding: 1rem; }
 .answer { min-height: 6rem; overflow-wrap: anywhere; }
 .answer.streaming { white-space: pre-wrap; }
 .answer .error { color: var(--bad); }
+.answer .placeholder { color: var(--muted); font-style: italic; }
 .answer pre { overflow-x: auto; }
 .metrics { color: var(--muted); font-size: .85rem; }
 .trace ol { padding-left: 1.2rem; font-size: .85rem; overflow-wrap: anywhere; }

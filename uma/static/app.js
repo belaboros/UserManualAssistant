@@ -156,8 +156,10 @@
     err.hidden = true;
     err.textContent = "";
     delete col.dataset.voting;
+    delete col.dataset.placeholder;
     col.dataset.rating = "0";
     setStars(col, 0, true);
+    if (isBlindHidden(col)) showPlaceholder(col);
   }
 
   function setStars(col, value, disabled) {
@@ -177,8 +179,33 @@
       " tok · " + cost + " · " + manuals;
   }
 
+  // A blind column that is not yet revealed shows a neutral placeholder instead of the live
+  // stream: intermediate narration and raw [§id] markers would give the strategy away.
+  function isBlindHidden(col) {
+    const q = state.question;
+    return !!(q && q.blind && !q.revealed.has(col.dataset.strategy));
+  }
+
+  function showPlaceholder(col) {
+    const answer = $(".answer", col);
+    const p = document.createElement("p");
+    p.className = "placeholder";
+    p.textContent = "Answering…";
+    answer.replaceChildren(p);
+    col.dataset.placeholder = "1";
+  }
+
   function onDelta(col, p) {
-    $(".answer", col).append(document.createTextNode(p.text || ""));
+    if (isBlindHidden(col)) {
+      if (!col.dataset.placeholder) showPlaceholder(col);
+      return;
+    }
+    const answer = $(".answer", col);
+    if (col.dataset.placeholder) { // revealed mid-stream: stream from here on
+      answer.textContent = "";
+      delete col.dataset.placeholder;
+    }
+    answer.append(document.createTextNode(p.text || ""));
   }
 
   function onTrace(col, p) {
@@ -196,7 +223,8 @@
     const answerEl = $(".answer", col);
     answerEl.classList.remove("streaming");
     answerEl.removeAttribute("aria-busy");
-    // Replaces everything streamed so far (preamble, raw [§id] markers).
+    delete col.dataset.placeholder;
+    // Replaces everything streamed so far (preamble, raw [§id] markers) or the placeholder.
     const html = renderMarkdown(a.text || "");
     answerEl.replaceChildren(linkCitations(html, a.citations || [], openSection));
     const badge = $(".status-badge", col);
@@ -212,7 +240,8 @@
     const answerEl = $(".answer", col);
     answerEl.classList.remove("streaming");
     answerEl.removeAttribute("aria-busy");
-    answerEl.textContent = ""; // drop any partial streamed text
+    delete col.dataset.placeholder;
+    answerEl.textContent = ""; // drop any partial streamed text or the placeholder
     const msg = document.createElement("p");
     msg.className = "error";
     msg.textContent = p.message || "This strategy failed.";
