@@ -86,8 +86,6 @@ class StatusTagFilter:
         self._found = False
 
     def feed(self, chunk: str) -> str:
-        if self._done and not chunk.strip():
-            return ""  # whitespace after the tag is dropped
         self._held += chunk
         out = ""
         while True:
@@ -104,8 +102,6 @@ class StatusTagFilter:
                     self._found = True
                 else:
                     self._status, self._found = "answered", False
-                if not self._held.strip():
-                    self._held = ""
                 continue
             start = self._held.find(_OPEN)
             if start >= 0:
@@ -119,6 +115,9 @@ class StatusTagFilter:
                     keep = n
                     break
             cut = len(self._held) - keep
+            if self._done:
+                # hold trailing whitespace after the tag until more text follows
+                cut = len(self._held[:cut].rstrip())
             out += self._held[:cut]
             self._held = self._held[cut:]
             return out
@@ -126,6 +125,8 @@ class StatusTagFilter:
     def finish(self) -> tuple[str, Status, bool]:
         # An unterminated tag is not a tag: show what was withheld.
         rest, self._held = self._held, ""
+        if self._done and not self._in_tag and not rest.strip():
+            rest = ""  # trailing whitespace after the tag is discarded
         self._in_tag = False
         return rest, self._status, self._found
 

@@ -99,3 +99,20 @@ def test_answer_to_dict_is_json_safe():
 def test_rules_text():
     assert "<status>not_covered</status>" in ANSWERING_RULES
     assert "[§<section_id>]" in AGENTIC_ADDENDUM
+
+
+def test_chunking_never_changes_output():
+    inputs = [
+        "t<status>answered</status>\nmore < 5",
+        "t<status>answered</status>\nTrailer < 5",
+        "Do X.\n<status>not_covered</status>\n",
+        "a <b> <sta c <status>contradiction_found</status>  ",
+        "plain < 5 text",
+    ]
+    for text in inputs:
+        expected = run([text])
+        assert run(list(text)) == expected
+        for i in range(len(text) + 1):
+            for j in range(i, len(text) + 1):
+                assert run([text[:i], text[i:j], text[j:]]) == expected, (text, i, j)
+        assert strip_status(text) == expected
