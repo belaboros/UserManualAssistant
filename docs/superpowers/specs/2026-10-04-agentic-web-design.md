@@ -50,8 +50,9 @@ Python.
 
 ### 2.2 Web phase
 
-- Tools: the server-side `web_search_20260209` tool with `max_uses` set to the budget, plus
-  `finish_phase`.
+- Tools: the server-side `web_search_20260209` tool, plus `finish_phase`. On each request
+  `max_uses` is the remaining budget, but at least 1, so the force-close turn (2.4) can run at most
+  one search beyond the budget. `Metrics.web_searches` counts the searches actually made.
 - Budget: `AGENT_WEB_MAX_SEARCHES`, default 8.
 - Input: the question, plus the local phase's `notes` and `gaps`. The prompt asks the model to
   fill the gaps **and** to check the claims the manuals make, especially versions, dates, settings
@@ -89,6 +90,11 @@ Python.
 
 If `finish_phase` comes in the same turn as other tool calls, those calls run first and then the
 phase ends.
+
+If the model ends a turn with plain text and no tool call, the strategy replies once with "Call
+finish_phase to end this phase." (in the web phase, preceded by the at-least-one-search reminder
+when no search has run yet). If the next turn again has no tool call, the phase ends as in 2.4,
+with the text as `notes`.
 
 ### 2.4 Force-close on budget
 
@@ -129,7 +135,9 @@ The merge writes each conflict as a Markdown block quote that starts with a fixe
 > ⚠ **Conflict: the manual may be out of date.** The manual says X [1]. The web says Y [2].
 ```
 
-The UI recognises the `⚠ **Conflict` prefix and styles the block so it stands out.
+The UI recognises the `⚠ **Conflict` prefix and styles the block so it stands out. If the answer
+contains a conflict block but its status tag says `answered`, the strategy sets the status to
+`contradiction_found`.
 
 ## 3. Architecture
 
