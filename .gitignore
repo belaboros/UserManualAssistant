@@ -1,2 +1,8 @@
 .claude/worktrees/
 .superpowers/
+manuals/
+data/
+.env
+.venv/
+__pycache__/
+.pytest_cache/

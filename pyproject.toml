@@ -1,0 +1,36 @@
+[project]
+name = "uma"
+version = "0.1.0"
+description = "UserManualAssistant: compares three retrieval strategies over user manuals"
+requires-python = ">=3.12"
+dependencies = [
+    "anthropic>=1.11.0",
+    "fastapi>=0.142.2",
+    "fastembed>=0.8.1",
+    "markdown-it-py>=4.2.0",
+    "numpy>=2.5.3",
+    "python-dotenv>=1.2.4",
+    "pyyaml>=6.0.3",
+    "selectolax>=1.0.0",
+    "uvicorn>=0.54.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+markers = ["live: calls the real Claude API"]
+addopts = "-m 'not live'"
+testpaths = ["tests"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["uma"]
