@@ -223,3 +223,23 @@ def test_missing_api_key_each_column_failed(tmp_path, monkeypatch):
     assert {p["strategy"] for p in failed} == set(STRATEGY_ORDER)
     assert all("ANTHROPIC_API_KEY" in p["message"] for p in failed)
     assert payloads[-1] == {"type": "done"}
+
+
+def test_section_with_nested_doc_path(tmp_path):
+    root = tmp_path / "manuals" / "man"
+    (root / "guide").mkdir(parents=True)
+    (root / "manual.yaml").write_text("id: man\ntitle: Man\nowner: Support\n")
+    (root / "guide" / "index.md").write_text("# Pairing\nHold the Link button 3 s.\n")
+    settings = Settings(db_path=tmp_path / "uma.db")
+    emb = HashingEmbedder()
+    store = CorpusStore(settings.db_path)
+    ingest(tmp_path / "manuals", store, emb)
+    assert store.section("man:guide/index:pairing") is not None
+    client = TestClient(create_app(settings, llm=FakeLLM([]), embedder=emb))
+    for url in ("/api/sections/man%3Aguide%2Findex%3Apairing", "/api/sections/man:guide/index:pairing"):
+        r = client.get(url)
+        assert r.status_code == 200, url
+        assert r.json()["id"] == "man:guide/index:pairing" and r.json()["manual_title"] == "Man"
+    assert client.get("/api/sections/man:guide/index:nope").status_code == 404
+    assert client.get("/api/status").status_code == 200
+    assert client.get("/api/strategies").status_code == 200

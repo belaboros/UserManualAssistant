@@ -179,7 +179,8 @@ def create_app(
             body(), media_type="text/event-stream", headers=headers, background=BackgroundTask(release)
         )
 
-    @app.get("/api/sections/{section_id}")
+    # ":path" because section ids keep the document's folders (e.g. "man:guide/index:pairing").
+    @app.get("/api/sections/{section_id:path}")
     def api_section(section_id: str) -> dict:
         s = store.section(section_id)
         if s is None:
