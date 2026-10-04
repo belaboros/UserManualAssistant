@@ -71,6 +71,8 @@ Use scope option 1 and provider option 1:
 - If the searches fail, the column still answers from the manuals and says the web check could not be done. If the manuals have nothing on the question, it answers from the web and says so; the strategy would do the same with an empty corpus, although the app still refuses questions until manuals are ingested (ADR 0013).
 - Questions, and search queries shaped by the manual findings, leave the app through Anthropic's web search. The README's statement that only prompts to the Anthropic API leave the machine now includes these searches.
 - The sample manuals describe fictional products, so the web cannot confirm or contradict them; conflict detection is best seen on real manuals or on the dated UAT corpus.
+- The column needs web search to be enabled for the Anthropic organisation (Claude Console). Without it the API rejects every web-phase request, and every question in this column fails after the local phase.
+- `max_uses` tracks the remaining search budget, so the tool definitions change after each search and web-phase requests rewrite the prompt cache instead of reading it: a known extra cost in exchange for an exact limit.
 - Offline tests use `FakeLLM` scripts for `server_tool_use`, `web_search_tool_result` and `pause_turn` blocks; no test touches the network.
 
 ## Revisit when

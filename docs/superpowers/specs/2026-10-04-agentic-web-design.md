@@ -94,7 +94,10 @@ phase ends.
 If the model ends a turn with plain text and no tool call, the strategy replies once with "Call
 finish_phase to end this phase." (in the web phase, preceded by the at-least-one-search reminder
 when no search has run yet). If the next turn again has no tool call, the phase ends as in 2.4,
-with the text as `notes`.
+with the text of every earlier no-tool turn plus this turn's text as `notes`. A web-phase turn
+that ran at least one search is not a strike: it gets the nudge (or the budget notice when the
+budget is reached) but never triggers this close; the budget and the request cap still bound the
+phase. A web phase that closes without any search gets the notes "No web search was made."
 
 ### 2.4 Force-close on budget
 

@@ -67,7 +67,7 @@ sequenceDiagram
             Note over A,C: tool_results + "Tool budget reached. Call finish_phase now".<br/>One more turn. No finish_phase: force-close, gaps "budget exhausted"
         end
         opt plain text and no tool call
-            Note over A,C: nudge "Call finish_phase to end this phase".<br/>A second plain-text turn force-closes with that text as notes
+            Note over A,C: nudge "Call finish_phase to end this phase".<br/>A second plain-text turn force-closes, keeping both turns' text as notes
         end
     end
     C-->>A: finish_phase(sufficient, gaps, notes with [§id] markers)
@@ -84,6 +84,9 @@ sequenceDiagram
         C-->>A: server_tool_use and web_search_tool_result blocks
         A->>A: number each result URL once
         A-->>UI: SSE trace web_search (query, result count or error)
+        opt searched and wrote text, but no tool call
+            Note over A,C: nudge, but not a strike: only turns that neither search<br/>nor call a tool count towards the force-close
+        end
         opt 8 searches used
             Note over A,C: "Tool budget reached" notice. One more turn.<br/>No finish_phase: force-close, gaps "budget exhausted"
         end
@@ -120,7 +123,9 @@ sequenceDiagram
    `finish_phase`, the phase is **force-closed**: `sufficient=false`, `gaps=["budget exhausted"]`,
    and its last text becomes the notes. If Claude writes plain text without calling any tool, it is
    nudged once ("Call finish_phase to end this phase."); a second plain-text turn closes the phase
-   with that text as the notes. Either way, the pipeline goes on to the next phase.
+   (`gaps=["did not call finish_phase"]`). A forced close never throws findings away: the notes
+   are the text of every earlier turn that called no tool, followed by the last turn's text.
+   Either way, the pipeline goes on to the next phase.
 4. **Web phase: check and fill in on the web.** `run_phase` runs again with
    [`AGENTIC_WEB_SEARCH`](../../uma/strategies/rules.py), and a prompt made of the question plus
    the local notes and gaps. The tools are `finish_phase` and Claude's server-side web search,
@@ -132,12 +137,20 @@ sequenceDiagram
 5. **Web budget, at least one search, `pause_turn`.** The budget is 8 searches
    (`AGENT_WEB_MAX_SEARCHES`). Each request sets `max_uses` to the searches left, but at least 1, so
    the extra turn after the budget notice can run at most one search over the budget; the
-   `web_searches` metric counts the searches actually made. Calling `finish_phase` before any search
-   is refused with "Search the web at least once before finishing." Because the searches run on
-   Anthropic's side, a long turn can come back with `stop_reason: "pause_turn"`. The app resumes it
+   `web_searches` metric counts the searches actually made. Because `max_uses` changes after every
+   search, the tool definitions change too, so each web-phase request rewrites the prompt cache
+   instead of reading it back: a known cost of keeping the limit exact. Calling `finish_phase`
+   before any search is refused with "Search the web at least once before finishing." (every
+   `finish_phase` call in that turn gets the reminder), and a web phase that ends without any
+   search reports "No web search was made." instead of passing on unsourced text. Because the
+   searches run on Anthropic's side, a long turn can come back with `stop_reason: "pause_turn"`. The app resumes it
    by sending the conversation back unchanged (no new user message), up to 5 times per phase; the
    6th pause closes the web phase straight away, because a nudge can't follow a search that is
-   still unresolved. The budget notice and the nudge work as in the local phase.
+   still unresolved. The budget notice and the nudge work as in the local phase, with one
+   difference: with server-side search, Claude often searches, writes its findings as prose and
+   ends the turn without calling a tool. Such a turn did work, so it is nudged (or, if it used up
+   the budget, gets the budget notice) but does not count as a strike; only turns that neither
+   search nor call a tool lead to the force-close. The phase still ends within the search budget.
 6. **Web sources are numbered, and only real ones survive.** Every result URL is added once to a
    numbered list ([`WebSources`](../../uma/strategies/web_sources.py)). Claude cites web pages in
    its notes as `[web:<url>]`, because the URLs are already in its context. When the phase ends,
@@ -167,11 +180,15 @@ sequenceDiagram
    opens the page in a new tab. The footer lists manuals and web hosts separately and shows the
    number of searches. Cost is the token cost of all three phases plus $0.01 per search.
 
+**Prerequisite: web search must be enabled for your Anthropic organisation** (an administrator
+turns it on in the Claude Console). If it is off, the API rejects every web-phase request, so every
+question in this column fails right after the local phase; the other four columns are not affected.
+
 Two edge cases differ from the other columns. If the web searches fail (the search tool reports an
 error such as `unavailable` or `too_many_requests`), the column still answers from the manuals and
 says that the web check could not be done. If the API rejects the request itself (for example
-because web search is turned off for your organisation), the column fails with that error like any
-other API error. And if the manuals have nothing on the question, the answer comes from the web
+because web search is turned off for your organisation, see the prerequisite above), the column
+fails with that error like any other API error. And if the manuals have nothing on the question, the answer comes from the web
 alone and says so; the strategy would do the same with an empty corpus, although the app refuses
 questions until some manuals are ingested.
 
@@ -241,7 +258,10 @@ In total about 44,200 input tokens, 4,600 output tokens and 3 searches:
 The "with caching" column applies because [`uma/llm.py`](../../uma/llm.py) sends a request-level
 cache marker. Within a phase, each request's prompt is the previous one plus a little more, so what
 is written to the cache adds up to roughly the last prompt of each phase (5,300 + 9,900 + 2,500 =
-17,700 tokens) and the rest is read back (18,300 + 23,400 + 2,500 − 17,700 = 26,500 tokens). The
+17,700 tokens) and the rest is read back (18,300 + 23,400 + 2,500 − 17,700 = 26,500 tokens). That
+is the best case: in the web phase `max_uses` tracks the remaining budget, so the tool definitions,
+and with them the cached prefix, change after every search and those requests write the cache
+again instead of reading it, which costs more than the table shows. The
 merge is a single call, so caching only adds the write premium there. That is about four times
 Agentic's worked example (about $0.03), and the three searches alone cost as much as a whole Agentic
 answer. More searches cost twice: $0.01 each, plus the extra input tokens their results add to
@@ -274,8 +294,11 @@ includes cache reads and writes and the search fee.
   its marker, so a claim can lose its citation. This is deliberate: an invented URL is worse than
   none.
 - **Budget and pause force-closes.** Broad questions can use all 8 local calls or all 8 searches.
-  Look for `[forced]` and `gaps: budget exhausted` on a planner line: that phase was cut short, and
-  the merge works with what it had.
+  Look for `[forced]` on a planner line together with one of three gaps: `budget exhausted` (the
+  budget ran out and the extra turn didn't call `finish_phase`), `did not call finish_phase` (two
+  turns without any tool call or search, despite the nudge) or `web search paused too often` (the
+  6th `pause_turn` in the web phase). That phase was cut short, and the merge works with what it
+  had: the text Claude wrote in its turns without a tool call.
 - **Web search unavailable.** When searches return errors, the trace shows `web search: "…" → error
   …`, and the answer says the manuals could not be checked against the web. The answer is then no
   better than Agentic's, at a higher cost.

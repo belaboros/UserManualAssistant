@@ -16,7 +16,7 @@ sequenceDiagram
             Note over A,C: tool_results + "Tool budget reached. Call finish_phase now".<br/>One more turn. No finish_phase: force-close, gaps "budget exhausted"
         end
         opt plain text and no tool call
-            Note over A,C: nudge "Call finish_phase to end this phase".<br/>A second plain-text turn force-closes with that text as notes
+            Note over A,C: nudge "Call finish_phase to end this phase".<br/>A second plain-text turn force-closes, keeping both turns' text as notes
         end
     end
     C-->>A: finish_phase(sufficient, gaps, notes with [§id] markers)
@@ -33,6 +33,9 @@ sequenceDiagram
         C-->>A: server_tool_use and web_search_tool_result blocks
         A->>A: number each result URL once
         A-->>UI: SSE trace web_search (query, result count or error)
+        opt searched and wrote text, but no tool call
+            Note over A,C: nudge, but not a strike: only turns that neither search<br/>nor call a tool count towards the force-close
+        end
         opt 8 searches used
             Note over A,C: "Tool budget reached" notice. One more turn.<br/>No finish_phase: force-close, gaps "budget exhausted"
         end
