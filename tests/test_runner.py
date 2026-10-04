@@ -43,6 +43,7 @@ async def test_runner_runs_in_parallel_and_persists(tmp_path):
         assert kinds == ["trace", "delta", "final"]
     assert events[0]["type"] == "trace" and events[0]["detail"] == {"q": "q"}
     saved = log.answers_for(qid)
+    assert slow.closed and fast.closed
     assert set(saved) == {"a", "b"} and saved["a"]["trace"] == [{"kind": "search", "detail": {"q": "q"}}]
 
 
@@ -84,3 +85,23 @@ async def test_runner_cleans_up_when_consumer_stops(tmp_path):
     await gen.aclose()
     await asyncio.sleep(0)
     assert s.closed
+
+
+async def test_runner_own_timeout_error_is_unexpected(tmp_path):
+    log, qid = setup(tmp_path)
+    s = ScriptedStrategy("t", raises=TimeoutError("internal"))
+    events = [e async for e in run_question(qid, "q", [s], log, timeout_s=5)]
+    assert events[-2]["message"] == "Unexpected error: TimeoutError"
+
+
+async def test_runner_survives_save_failure(tmp_path, monkeypatch, caplog):
+    log, qid = setup(tmp_path)
+
+    def boom(*a, **k):
+        raise RuntimeError("disk")
+
+    monkeypatch.setattr(log, "save_answer", boom)
+    with caplog.at_level("ERROR", logger="uma.runner"):
+        events = [e async for e in run_question(qid, "q", [ScriptedStrategy("a")], log, timeout_s=5)]
+    assert events[-1] == {"type": "done"}
+    assert any(r.levelname == "ERROR" and "save answer" in r.getMessage() for r in caplog.records)

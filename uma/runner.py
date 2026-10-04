@@ -1,12 +1,15 @@
 """Runs all strategies in parallel and merges their events into one SSE payload stream."""
 
 import asyncio
+import logging
 from collections.abc import AsyncIterator
+from contextlib import aclosing
 from dataclasses import asdict
 
 from uma.log import Log
 from uma.strategies.base import Failed, Final, Strategy, TextDelta, TraceStep, answer_to_dict
 
+logger = logging.getLogger(__name__)
 _DONE = object()
 
 
@@ -17,44 +20,41 @@ async def _run_one(
     trace: list[dict] = []
     answer = None
     error: str | None = None
+
+    async def emit(payload: dict) -> None:
+        await queue.put({"strategy": strategy.id, **payload})
+
+    cm = asyncio.timeout(timeout_s)
     try:
         try:
-            async with asyncio.timeout(timeout_s) as cm:
-                try:
-                    async for ev in strategy.answer(question):
-                        if isinstance(ev, TextDelta):
-                            await queue.put({"strategy": strategy.id, "type": "delta", "text": ev.text})
-                        elif isinstance(ev, TraceStep):
-                            trace.append(asdict(ev))
-                            await queue.put({"strategy": strategy.id, "type": "trace",
-                                             "kind": ev.kind, "detail": ev.detail})
-                        elif isinstance(ev, Final):
-                            answer = ev.answer
-                            await queue.put({"strategy": strategy.id, "type": "final",
-                                             "answer": answer_to_dict(ev.answer)})
-                            break
-                        elif isinstance(ev, Failed):
-                            error = ev.message
-                            await queue.put({"strategy": strategy.id, "type": "failed",
-                                             "message": ev.message, "hint_doc": ev.hint_doc})
-                            break
-                except Exception as e:
-                    if cm.expired():
-                        raise TimeoutError from e
-                    raise
-        except TimeoutError:
-            error = f"Timed out after {timeout_s:g} s"
-            await queue.put({"strategy": strategy.id, "type": "failed",
-                             "message": error, "hint_doc": None})
+            async with cm, aclosing(strategy.answer(question)) as events:
+                async for ev in events:
+                    if isinstance(ev, TextDelta):
+                        await emit({"type": "delta", "text": ev.text})
+                    elif isinstance(ev, TraceStep):
+                        trace.append(asdict(ev))
+                        await emit({"type": "trace", "kind": ev.kind, "detail": ev.detail})
+                    elif isinstance(ev, Final):
+                        answer = ev.answer
+                        await emit({"type": "final", "answer": answer_to_dict(ev.answer)})
+                        break
+                    elif isinstance(ev, Failed):
+                        error = ev.message
+                        await emit({"type": "failed", "message": ev.message, "hint_doc": ev.hint_doc})
+                        break
         except Exception as e:
-            error = f"Unexpected error: {type(e).__name__}"
-            await queue.put({"strategy": strategy.id, "type": "failed",
-                             "message": error, "hint_doc": None})
+            if isinstance(e, TimeoutError) and cm.expired():
+                error = f"Timed out after {timeout_s:g} s"
+            else:
+                error = f"Unexpected error: {type(e).__name__}"
+            await emit({"type": "failed", "message": error, "hint_doc": None})
         if answer is None and error is None:
             error = "Strategy finished without an answer"
-            await queue.put({"strategy": strategy.id, "type": "failed",
-                             "message": error, "hint_doc": None})
-        log.save_answer(question_id, strategy.id, answer=answer, error=error, trace=trace)
+            await emit({"type": "failed", "message": error, "hint_doc": None})
+        try:
+            log.save_answer(question_id, strategy.id, answer=answer, error=error, trace=trace)
+        except Exception:
+            logger.exception("Failed to save answer for strategy %s", strategy.id)
     finally:
         await queue.put(_DONE)
 

@@ -111,7 +111,10 @@ class Log:
         d = answer_to_dict(answer)
         m, u = d["metrics"], d["metrics"]["usage"]
         self._run(
-            "INSERT OR REPLACE INTO answers VALUES(?,?,?,?,?,?,NULL,?,?,?,?,?,?,?,?)",
+            "INSERT OR REPLACE INTO answers(question_id, strategy, status, text, citations_json,"
+            " trace_json, error, latency_ms, input_tokens, output_tokens, cache_read_tokens,"
+            " cache_write_tokens, cost_usd, manuals_used_json, tool_calls)"
+            " VALUES(?,?,?,?,?,?,NULL,?,?,?,?,?,?,?,?)",
             (question_id, strategy_id, d["status"], d["text"], json.dumps(d["citations"]), trace_json,
              m["latency_ms"], u["input_tokens"], u["output_tokens"], u["cache_read_tokens"],
              u["cache_write_tokens"], m["cost_usd"], json.dumps(m["manuals_used"]), m["tool_calls"]),
