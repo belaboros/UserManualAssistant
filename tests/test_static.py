@@ -92,3 +92,13 @@ def test_web_citation_markup_is_safe(tmp_path):
     assert "https?:" in js  # only http(s) URLs become links
     css = client.get("/static/style.css").text
     assert "blockquote.conflict" in css
+
+
+def test_conflict_regex_accepts_emoji_variation(tmp_path):
+    client, _ = make_client(tmp_path)
+    js = client.get("/static/app.js").text
+    pattern = re.search(r"if \(/(.*Conflict)/\.test\(bq\.textContent\)\)", js).group(1)
+    for prefix in ("⚠ Conflict", "⚠️ Conflict", "  ⚠️  Conflict"):
+        assert re.match(pattern, prefix), prefix
+    assert not re.match(pattern, "Conflict")
+    assert '" web search"' in js and '" web searches"' in js

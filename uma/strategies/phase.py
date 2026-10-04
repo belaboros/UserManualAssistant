@@ -39,6 +39,7 @@ _EXHAUSTED = "Tool budget exhausted."
 _NUDGE = "Call finish_phase to end this phase."
 _SEARCH_REMINDER = "Search the web at least once before finishing."
 _UNAVAILABLE = "Web search was unavailable."
+_NO_SEARCH = "No web search was made."
 _MAX_RESUMPTIONS = 5
 _EXTRA_REQUESTS = 4  # nudge, budget notice and slack, on top of budget + resumptions
 
@@ -80,6 +81,8 @@ async def run_phase(
     queries: dict[str, object] = {}  # server_tool_use id -> query, until its result arrives
     searched_ok = resuming = False
     turn_text = ""  # assistant text of the current turn, across pause_turn resumptions
+    turn_start = 0  # web_searches when the current turn began
+    findings: list[str] = []  # text of earlier turns that called no tool, kept for a forced close
     noticed = nudged = nudged_last = False
 
     def request_tools() -> list[dict]:
@@ -90,9 +93,14 @@ async def run_phase(
     def budget_reached() -> bool:
         return (web_searches if web else calls) >= budget
 
+    def forced_notes() -> str:
+        return "\n\n".join(t for t in [*findings, turn_text] if t)
+
     def close(sufficient: bool, gaps: list[str], notes: str, forced: bool):
         if web:
-            if web_searches and not searched_ok:
+            if not web_searches:
+                sufficient, notes = False, _NO_SEARCH
+            elif not searched_ok:
                 sufficient, notes = False, _UNAVAILABLE
             else:
                 notes = sources.rewrite(notes)
@@ -107,7 +115,7 @@ async def run_phase(
     while True:
         if requests >= max_requests:
             # Defensive cap: closes like the budget case, without another request.
-            for item in close(False, ["budget exhausted"], turn_text, True):
+            for item in close(False, ["budget exhausted"], forced_notes(), True):
                 yield item
             return
         requests += 1
@@ -136,6 +144,8 @@ async def run_phase(
         finish = next((b for b in uses if b.get("name") == "finish_phase"), None)
         text = "".join(b.get("text", "") for b in response.content if b.get("type") == "text")
         turn_text = turn_text + text if resuming else text
+        if not resuming:
+            turn_start = web_searches
 
         if web:
             for block in response.content:
@@ -159,7 +169,7 @@ async def run_phase(
             # The API resumes a paused turn when the conversation is sent back unchanged.
             pauses += 1
             if pauses > _MAX_RESUMPTIONS:
-                for item in close(False, ["web search paused too often"], turn_text, True):
+                for item in close(False, ["web search paused too often"], forced_notes(), True):
                     yield item
                 return
             resuming = True
@@ -168,33 +178,45 @@ async def run_phase(
 
         if noticed:
             # One turn after the budget notice; tools it calls are not run.
-            for item in close(False, ["budget exhausted"], turn_text, True) if finish is None else finished(finish, True):
-                yield item
+            if finish is not None:
+                for item in finished(finish, True):
+                    yield item
+            else:
+                for item in close(False, ["budget exhausted"], forced_notes(), True):
+                    yield item
             return
         if not uses:
-            if nudged:
-                for item in close(False, ["did not call finish_phase"], turn_text, True):
+            # A web turn that searched did work, so it is not a strike; only a turn that did nothing is.
+            searched = web and web_searches > turn_start
+            if nudged and not searched:
+                for item in close(False, ["did not call finish_phase"], forced_notes(), True):
                     yield item
                 return
+            findings.append(turn_text)
+            turn_text = ""
             if web and budget_reached():
                 # Searches in this turn used up the budget.
                 noticed = True
                 messages.append({"role": "user", "content": _BUDGET_NOTICE})
                 continue
-            nudged = nudged_last = True
+            nudged_last = True
+            nudged = nudged or not searched
             nudge = f"{_SEARCH_REMINDER} {_NUDGE}" if web and web_searches == 0 else _NUDGE
             messages.append({"role": "user", "content": nudge})
             continue
 
         results: list[dict] = []
+        reject = web and web_searches == 0 and finish is not None
+        if reject:
+            finish = None
         for block in uses:
             name = block.get("name")
             result: dict = {"type": "tool_result", "tool_use_id": block.get("id")}
             if name == "finish_phase":
-                if web and web_searches == 0 and block is finish:
+                if reject:
+                    # Every finish_phase block needs its tool_result, or the next request is invalid.
                     result.update(content=_SEARCH_REMINDER, is_error=True)
                     results.append(result)
-                    finish = None
                 continue
             if run_tool is None:
                 result.update(content=f"Unknown tool: {name}", is_error=True)

@@ -115,7 +115,7 @@ async def test_plain_text_gets_one_nudge_then_closes():
     assert _last_user(llm.calls[1]) == NUDGE
     assert [e.kind for e in events[:-1]] == ["planner"]
     result = events[-1]
-    assert result.notes == "b" and result.gaps == ["did not call finish_phase"]
+    assert result.notes == "a\n\nb" and result.gaps == ["did not call finish_phase"]
     assert result.sufficient is False and result.forced is True and result.tool_calls == 0
 
 
@@ -226,7 +226,7 @@ async def test_web_nudge_starts_with_reminder_until_searched():
     llm = FakeLLM([text_response("a"), text_response("b")])
     events = await _run_web(llm)
     assert _last_user(llm.calls[1]) == f"{REMINDER} {NUDGE}"
-    assert events[-1].gaps == ["did not call finish_phase"] and events[-1].notes == "b"
+    assert events[-1].gaps == ["did not call finish_phase"] and events[-1].notes == "No web search was made."
 
     llm = FakeLLM([_search_turn(), finish_phase_response(True, [], "n")])
     await _run_web(llm)
@@ -318,3 +318,65 @@ async def test_request_cap_closes_phase():
     assert len(llm.calls) == 1 + 5 + 4
     result = events[-1]
     assert result.forced is True and result.gaps == ["budget exhausted"] and result.sufficient is False
+
+
+# --- forced closes keep findings; search turns are not strikes ----------------
+
+def _search_text_turn(text, query="q", results=(A,)):
+    from uma.llm import LLMResponse
+    return LLMResponse([*web_search_blocks(query, list(results)), {"type": "text", "text": text}],
+                       "end_turn", Usage(10, 5))
+
+
+async def test_search_text_turns_are_not_strikes():
+    llm = FakeLLM([_search_text_turn("one", "q1"), _search_text_turn("two", "q2"), _search_text_turn("three", "q3"),
+                   finish_phase_response(True, [], "done")])
+    events = await _run_web(llm, budget=3)
+    assert len(llm.calls) == 4
+    assert [_last_user(c) for c in llm.calls[1:]] == [NUDGE, NUDGE, NOTICE]
+    result = events[-1]
+    assert result.notes == "done" and result.web_searches == 3 and result.sufficient is True
+
+
+async def test_search_text_twice_keeps_both_texts():
+    llm = FakeLLM([_search_text_turn("FIRST FINDINGS [web:https://a.example/x]", "q1"),
+                   _search_text_turn("SECOND", "q2"), text_response("final")])
+    events = await _run_web(llm, budget=2)
+    assert _last_user(llm.calls[1]) == NUDGE and _last_user(llm.calls[2]) == NOTICE
+    result = events[-1]
+    assert result.gaps == ["budget exhausted"] and result.forced is True
+    assert result.notes == "FIRST FINDINGS [web:1]\n\nSECOND\n\nfinal"
+
+
+async def test_strike_close_after_search_turn_keeps_its_text():
+    llm = FakeLLM([_search_text_turn("FIRST [web:https://a.example/x]"), text_response("x"), text_response("y")])
+    events = await _run_web(llm)
+    assert [_last_user(c) for c in llm.calls[1:]] == [NUDGE, NUDGE]
+    result = events[-1]
+    assert result.gaps == ["did not call finish_phase"] and result.notes == "FIRST [web:1]\n\nx\n\ny"
+
+
+async def test_budget_reached_on_search_text_turn_sends_notice():
+    llm = FakeLLM([_search_text_turn("only"), finish_phase_response(False, ["more"], "n")])
+    events = await _run_web(llm, budget=1)
+    assert _last_user(llm.calls[1]) == NOTICE
+    assert events[-1].forced is True and events[-1].notes == "n"
+
+
+async def test_every_rejected_finish_block_gets_a_result():
+    first = finish_phase_response(True, [], "early")
+    first.content += finish_phase_response(True, [], "again").content
+    llm = FakeLLM([first, finish_phase_response(True, [], "late", extra=web_search_blocks("q", [A]))])
+    await _run_web(llm)
+    ids = [b["id"] for b in first.content]
+    assert _last_user(llm.calls[1]) == [{"type": "tool_result", "tool_use_id": i, "content": REMINDER,
+                                         "is_error": True} for i in ids]
+
+
+async def test_web_close_without_any_search_drops_notes():
+    llm = FakeLLM([text_response("unsourced a"), text_response("unsourced b")])
+    events = await _run_web(llm)
+    result = events[-1]
+    assert result.notes == "No web search was made." and result.sufficient is False
+    assert result.gaps == ["did not call finish_phase"] and result.web_searches == 0
+    assert events[-2].detail["sufficient"] is False

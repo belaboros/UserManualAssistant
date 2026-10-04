@@ -114,7 +114,8 @@ class AgenticWebStrategy:
         if not found:
             warn_missing_status(self.id, logger)
         text, citations = resolve_mixed_markers(text, self.manual_tools.lookup, sources)
-        if status == "answered" and _CONFLICT in text:
+        # "⚠️" is "⚠" plus the emoji variation selector U+FE0F; both spellings mark a conflict block.
+        if status == "answered" and _CONFLICT in text.replace("️", ""):
             status = "contradiction_found"
         cost = cost_usd(self.settings.model, usage.input_tokens, usage.output_tokens,
                         usage.cache_read_tokens, usage.cache_write_tokens)

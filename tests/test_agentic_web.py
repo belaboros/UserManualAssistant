@@ -90,6 +90,13 @@ async def test_conflict_block_sets_contradiction(sample_store, embedder):
     assert a.text.startswith(CONFLICT)
 
 
+async def test_emoji_variation_conflict_sets_contradiction(sample_store, embedder):
+    # "⚠️" is U+26A0 followed by the emoji variation selector U+FE0F.
+    llm = _script("> ⚠️ **Conflict: the manual may be out of date.** The manual says 3 s "
+                  f"[§{PAIRING}]. The web says 5 s [web:1].\n<status>answered</status>")
+    a = (await _run(sample_store, embedder, llm))[-1].answer
+    assert a.status == "contradiction_found"
+
 async def test_web_unavailable_still_answers(sample_store, embedder):
     llm = _script("Manual only [§" + PAIRING + "].\n<status>answered</status>",
                   search=web_search_blocks("hub firmware", None, error_code="unavailable"))

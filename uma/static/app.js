@@ -254,7 +254,8 @@
     const cost = typeof m.cost_usd === "number" ? "$" + m.cost_usd.toFixed(4) : "$—";
     const manuals = (m.manuals_used || []).join(", ") || "—";
     const hosts = webHosts(citations);
-    const searches = m.web_searches > 0 ? " · " + m.web_searches + " web searches" : "";
+    const searches = m.web_searches > 0
+      ? " · " + m.web_searches + (m.web_searches === 1 ? " web search" : " web searches") : "";
     const sources = hosts.length ? "Manuals: " + manuals + " · Web: " + hosts.join(", ") : manuals;
     return secs + " s · " + (u.input_tokens || 0) + "/" + (u.output_tokens || 0) +
       " tok · " + cost + searches + " · " + sources;
@@ -323,7 +324,7 @@
     const html = renderMarkdown(a.text || "");
     answerEl.replaceChildren(linkCitations(html, a.citations || [], openSection));
     answerEl.querySelectorAll("blockquote").forEach((bq) => {
-      if (/^\s*⚠\s*Conflict/.test(bq.textContent)) bq.classList.add("conflict");
+      if (/^\s*⚠️?\s*Conflict/.test(bq.textContent)) bq.classList.add("conflict");
     });
     const badge = $(".status-badge", col);
     badge.textContent = STATUS_TEXT[a.status] || a.status;
