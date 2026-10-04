@@ -194,3 +194,11 @@ def tool_use_response(
 ) -> LLMResponse:
     block = {"type": "tool_use", "id": id or f"toolu_{uuid.uuid4().hex[:16]}", "name": name, "input": input}
     return LLMResponse([block], "tool_use", usage if usage is not None else Usage(10, 5))
+
+
+def finish_phase_response(
+    sufficient: bool, gaps: list[str], notes: str, *, extra: list[dict] | None = None
+) -> LLMResponse:
+    """A `tool_use` turn calling finish_phase; `extra` blocks come before it."""
+    block = tool_use_response("finish_phase", {"sufficient": sufficient, "gaps": gaps, "notes": notes}).content[0]
+    return LLMResponse([*(extra or []), block], "tool_use", Usage(10, 5))
